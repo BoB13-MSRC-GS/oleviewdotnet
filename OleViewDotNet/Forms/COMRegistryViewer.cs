@@ -1033,7 +1033,7 @@ internal partial class COMRegistryViewer : UserControl
             await clsid.LoadSupportedInterfacesAsync(bRefresh, null);
             int interface_count = clsid.Interfaces.Count();
             int factory_count = clsid.FactoryInterfaces.Count();
-            node.Nodes.Remove(wait_node);
+            //node.Nodes.Remove(wait_node);
             if (interface_count == 0 && factory_count == 0)
             {
                 /* KWAKMU18 20240918 ADDED - TEST */
@@ -1094,6 +1094,7 @@ internal partial class COMRegistryViewer : UserControl
             success = false;
             /* KWAKMU18 20240918 ADDED - TEST */
         }
+        node.Nodes.Remove(wait_node);
         /* KWAKMU18 20240918 ADDED - TEST */
         if (success == false || clsid.Interfaces.Count() < 2)
         {
@@ -1137,8 +1138,11 @@ internal partial class COMRegistryViewer : UserControl
                 {
                     if (string.IsNullOrWhiteSpace(line)) break;
                     string[] parts = line.Split(new string[] { " - " }, StringSplitOptions.None);
-                    if (string.IsNullOrWhiteSpace(parts[1])) node.Nodes.Add(CreateNode(parts[0].Substring(1,36), InterfaceKey, null));
-                    else node.Nodes.Add(CreateNode(parts[1], InterfaceKey, null));
+                    Guid guid = new Guid(parts[0]);
+                    //if (string.IsNullOrWhiteSpace(parts[1])) node.Nodes.Add(CreateNode(parts[0].Substring(1,36), InterfaceKey, null));
+                    //else node.Nodes.Add(CreateNode(parts[1], InterfaceKey, null));
+                    COMInterfaceInstance comInterfaceInstance = new COMInterfaceInstance(guid, m_registry) ;
+                    node.Nodes.Add(CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(comInterfaceInstance.Iid), comInterfaceInstance));
                 }
             }
         }
