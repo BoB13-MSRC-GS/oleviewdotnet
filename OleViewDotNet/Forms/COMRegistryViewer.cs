@@ -411,16 +411,15 @@ internal partial class COMRegistryViewer : UserControl
     }
 
     /* KWAKMU18 ADDED 20240906 - Add Overloading Method */
-    private TreeNode CreateInterfaceNameNode(COMRegistry registry, COMInterfaceEntry ent, COMInterfaceInstance instance, String className)
+    private TreeNode CreateInterfaceNameNode(COMRegistry registry, COMInterfaceEntry ent, COMInterfaceInstance instance, String clsid)
     {
-        String path = "interfaces\\" + className + ".txt";
+        if (!Directory.Exists("interfaces\\iids")) Directory.CreateDirectory("interfaces\\iids");
+        String path = "interfaces\\iids\\" + ent.Iid.ToString() + ".txt"; 
         TreeNode treeNode = CreateNode(ent.Name, InterfaceKey, ent, BuildInterfaceToolTip(ent, instance));
         sourceCodeViewerControl.AutoParse = true;
-        using (StreamWriter writer = new StreamWriter(path, append: true))
+        using (StreamWriter writer = new StreamWriter(path))
         {
-            //writer.WriteLine(ent.Name);
-            sourceCodeViewerControl.SelectedObject = treeNode?.Tag;
-            writer.WriteLine(sourceCodeViewerControl.Format());
+            writer.Write(clsid);
         }
         return treeNode;
     }
@@ -806,13 +805,13 @@ internal partial class COMRegistryViewer : UserControl
 
     private static IEnumerable<TreeNode> LoadAppIDs(COMRegistry registry, bool filterIL, bool filterAC)
     {
-        var clsidsByAppId = registry.ClsidsByAppId;
+        var clsidsByAppId = registry.ClsidsByAppId; 
         var appids = registry.AppIDs;
 
         List<TreeNode> serverNodes = new();
         foreach (var pair in appids)
         {
-            COMAppIDEntry appidEnt = appids[pair.Key];
+            COMAppIDEntry appidEnt = appids[pair.Key]; 
 
             if (filterIL && COMSecurity.GetILForSD(appidEnt.AccessPermission) == TokenIntegrityLevel.Medium &&
                 COMSecurity.GetILForSD(appidEnt.LaunchPermission) == TokenIntegrityLevel.Medium)
@@ -1016,9 +1015,9 @@ internal partial class COMRegistryViewer : UserControl
         node.Nodes.AddRange(intfs.Select(i => CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(i.Iid), i)).OrderBy(n => n.Text).ToArray());
     }
     /* KWAKMU18 ADDED 2024???? - Add Overloading Method */
-    private void AddInterfaceNodes(TreeNode node, IEnumerable<COMInterfaceInstance> intfs, String className)
+    private void AddInterfaceNodes(TreeNode node, IEnumerable<COMInterfaceInstance> intfs, String clsid)
     {
-        node.Nodes.AddRange(intfs.Select(i => CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(i.Iid), i, className)).OrderBy(n => n.Text).ToArray());
+        node.Nodes.AddRange(intfs.Select(i => CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(i.Iid), i, clsid)).OrderBy(n => n.Text).ToArray());
     }
     /* KWAKMU18 ADDED 2024???? - Add Overloading Method */
     private async Task SetupCLSIDNodeTree(ICOMClassEntry clsid, TreeNode node, bool bRefresh)
@@ -1029,10 +1028,6 @@ internal partial class COMRegistryViewer : UserControl
         /* KWAKMU18 ADDED 20240917 - TEST */
         TreeNode wait_node = CreateNode("Please Wait, Populating Interfaces", InterfaceKey, null);
         node.Nodes.Add(wait_node);
-        /* KWAKMU18 ADDED 20240906 - Create Directory & File */
-        if (!Directory.Exists("interfaces")) Directory.CreateDirectory("interfaces");
-        File.Create("interfaces\\" + clsid.Name + ".txt").Close();
-        /* KWAKMU18 ADDED 20240906 - Create Directory & File */
         try
         {
             await clsid.LoadSupportedInterfacesAsync(bRefresh, null);
@@ -1052,8 +1047,8 @@ internal partial class COMRegistryViewer : UserControl
                 if (interface_count > 0)
                 {
                     //node.Nodes.Remove(wait_node);
-                    /* KWAKMU18 ADDED 20240906 - Add Parameter: Class Name */
-                    AddInterfaceNodes(node, clsid.Interfaces, clsid.Name);
+                    /* KWAKMU18 ADDED 20241002 - Add Parameter: Clsid */
+                    AddInterfaceNodes(node, clsid.Interfaces, clsid.Clsid.ToString());
                     /* KWAKMU18 ADDED 20240906 - Add Parameter: Class Name */
                 }
                 else
@@ -1068,7 +1063,7 @@ internal partial class COMRegistryViewer : UserControl
                 {
                     TreeNode factory = CreateNode("Factory Interfaces", FolderKey, null);
                     /* KWAKMU18 ADDED 20240906 - Add Parameter: Class Name */
-                    AddInterfaceNodes(factory, clsid.FactoryInterfaces, clsid.Name);
+                    AddInterfaceNodes(factory, clsid.FactoryInterfaces);
                     /* KWAKMU18 ADDED 20240906 - Add Parameter: Class Name */
                     node.Nodes.Add(factory);
 
@@ -1100,8 +1095,21 @@ internal partial class COMRegistryViewer : UserControl
             /* KWAKMU18 20240918 ADDED - TEST */
         }
         /* KWAKMU18 20240918 ADDED - TEST */
-        if (success == false)
+        if (success == false || clsid.Interfaces.Count() < 2)
         {
+            Form popup = new Form();
+            popup.Text = "Please Wait...";
+            popup.StartPosition = FormStartPosition.CenterScreen;
+            popup.Width = 300;
+            popup.Height = 150;
+
+            Label label = new Label();
+            label.Text = "Resolving Interfaces...";
+            label.Dock = DockStyle.Fill;
+            label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            popup.Controls.Add(label);
+
+            popup.Show();
             string registryPath = @"Interface";
             String classGuid = "{" + clsid.Clsid.ToString() + "}";
             Process process = new Process();
@@ -1120,6 +1128,7 @@ internal partial class COMRegistryViewer : UserControl
             {
                 MessageBox.Show("Failed to resolve interfaces.");
             }
+            popup.Close();
             process.Dispose();
             using (StreamReader reader = new StreamReader("now.list"))
             {
@@ -2508,37 +2517,60 @@ internal partial class COMRegistryViewer : UserControl
         if (File.Exists(path)) File.Delete(path);
         sourceCodeViewerControl.ChangeToCpp();
         var tempNode = CreateNode("temp", ClassKey, proxy.ComplexTypes.Where(t => !t.IsUnion));
-        tempNode.Nodes.AddRange(proxy.ComplexTypes.Select(type => CreateNode(type.Name, "temp", type)).ToArray());
-        using (StreamWriter writer = new StreamWriter(path, append: true))
-        {
-            writer.WriteLine(proxy.Path);
-            foreach (TreeNode nowNode in tempNode.Nodes)
-            {
-                sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
-                writer.WriteLine(sourceCodeViewerControl.Format());
-            }
-        }
-        tempNode = CreateNode("temp", ClassKey, proxy.ComplexTypes.Where(t => t.IsUnion));
-        tempNode.Nodes.AddRange(proxy.ComplexTypes.Select(type => CreateNode(type.Name, "temp", type)).ToArray());
-        using (StreamWriter writer = new StreamWriter(path, append: true))
-        {
-            writer.WriteLine(proxy.Path);
-            foreach (TreeNode nowNode in tempNode.Nodes)
-            {
-                sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
-                writer.WriteLine(sourceCodeViewerControl.Format());
-            }
-        }
+        //tempNode.Nodes.AddRange(proxy.ComplexTypes.Select(type => CreateNode(type.Name, "temp", type)).ToArray());
+        //using (StreamWriter writer = new StreamWriter(path, append: true))
+        //{
+        //    writer.WriteLine(proxy.Path);
+        //    foreach (TreeNode nowNode in tempNode.Nodes)
+        //    {
+        //        sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
+        //        writer.WriteLine(sourceCodeViewerControl.Format());
+        //    }
+        //}
+        //tempNode = CreateNode("temp", ClassKey, proxy.ComplexTypes.Where(t => t.IsUnion));
+        //tempNode.Nodes.AddRange(proxy.ComplexTypes.Select(type => CreateNode(type.Name, "temp", type)).ToArray());
+        //using (StreamWriter writer = new StreamWriter(path, append: true))
+        //{
+        //    writer.WriteLine(proxy.Path);
+        //    foreach (TreeNode nowNode in tempNode.Nodes)
+        //    {
+        //        sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
+        //        writer.WriteLine(sourceCodeViewerControl.Format());
+        //    }
+        //}
         tempNode = CreateNode("temp", FolderKey, proxy.Entries);
         tempNode.Nodes.AddRange(proxy.Entries.Select(type => CreateNode(type.Name, "temp", type)).ToArray());
         using (StreamWriter writer = new StreamWriter(path, append: true))
         {
             writer.WriteLine(proxy.Path);
-            foreach(TreeNode nowNode in tempNode.Nodes)
+            String clsid = null;
+            sourceCodeViewerControl.m_isReally = false;
+            foreach (TreeNode nowNode in tempNode.Nodes)
             {
                 sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
-                writer.WriteLine(sourceCodeViewerControl.Format());
+                
+                //writer.WriteLine(sourceCodeViewerControl.Format());
+                if (File.Exists($"interfaces\\iids\\{sourceCodeViewerControl.GetIid()}.txt"))
+                {
+                    using (StreamReader reader = new StreamReader($"interfaces\\iids\\{sourceCodeViewerControl.GetIid()}.txt"))
+                    {
+                        clsid = reader.ReadToEnd();
+                        break;
+                    }
+                }
             }
+            if (clsid != null)
+            {
+                foreach (TreeNode nowNode in tempNode.Nodes)
+                {
+                    sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
+                    using (StreamWriter tempwriter = new StreamWriter($"interfaces\\iids\\{sourceCodeViewerControl.GetIid()}.txt"))
+                    {
+                        tempwriter.Write(clsid);
+                    }
+                }
+            }
+            sourceCodeViewerControl.m_isReally = true;
         }
         /* KWAKMU18 20240908 ADDED - Add Code To Extract All Interfaces In Proxy Files */
 

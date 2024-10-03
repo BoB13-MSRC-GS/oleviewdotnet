@@ -14,10 +14,12 @@
 //    You should have received a copy of the GNU General Public License
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
+using NtApiDotNet;
 using OleViewDotNet.Database;
 using OleViewDotNet.Utilities.Format;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
 
@@ -33,6 +35,7 @@ internal partial class SourceCodeViewerControl : UserControl
     private bool m_hide_comments;
     private bool m_interfaces_only;
     private bool m_hide_parsing_options;
+    public bool m_isReally = true;
 
     public SourceCodeViewerControl()
     {
@@ -100,12 +103,107 @@ internal partial class SourceCodeViewerControl : UserControl
             builder.AppendLine(m_selected_obj is null ?
                 "No formattable object selected"
                 : $"'{m_selected_obj}' is not formattable.");
+            return builder.ToString();
         }
+        if (!m_isReally) return builder.ToString();
+        if (!Directory.Exists("interfaces\\idls")) Directory.CreateDirectory("interfaces\\idls");
+        String fileName = "interfaces\\idls\\";
+        if (builder.ToString().StartsWith("struct") ||
+            builder.ToString().StartsWith("\nstruct") || builder.ToString().StartsWith("[switch_type") ||
+            builder.ToString().StartsWith("\nunion") || builder.ToString().StartsWith("union")) return builder.ToString();
+        String content;
+        using (StreamWriter writer = new StreamWriter(fileName+"before.interface"))
+        {
+            content = builder.ToString().TrimEnd('\n');
+            content = content.TrimEnd('\n');
+            writer.Write(content);
+        }
+        Form popup = new Form();
+        popup.Text = "Please Wait...";
+        popup.StartPosition = FormStartPosition.CenterScreen;
+        popup.Width = 300;
+        popup.Height = 150;
+
+        Label label = new Label();
+        label.Text = "Resolving Methods...";
+        label.Dock = DockStyle.Fill;
+        label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+        popup.Controls.Add(label);
+
+        popup.Show();
+        Process process = new Process();
+        process.StartInfo.FileName = "method.exe";
+        process.StartInfo.CreateNoWindow = true;
+        process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+        try
+        {
+            process.Start();
+            process.WaitForExit();
+        }
+        catch
+        {
+            popup.Close();
+            MessageBox.Show("Failed to resolve interfaces.");
+            SetText(builder.ToString());
+            return builder.ToString();
+        }
+        popup.Close();
+        int exitCode = process.ExitCode;
+        if (exitCode != 0)
+        {
+            SetText(builder.ToString());
+            return builder.ToString();
+        }
+        process.Dispose();
+        using (StreamReader reader = new StreamReader(fileName + "after.interface"))
+        {
+            content = reader.ReadToEnd();
+        }
+        SetText(content);
+        return content;
+        /* KWAKMU18 ADDED 20241001 - TEST*/
         SetText(builder.ToString());
+        /* KWAKMU18 ADDED 20241001 - TEST*/
         /* KWAKMU18 ADDED 20240905 - Add Return Value */
         return builder.ToString();
         /* KWAKMU18 ADDED 20240905 - Add Return Value */
+    }
 
+    internal String GetIid()
+    {
+        COMSourceCodeBuilder builder = new(m_registry)
+        {
+            InterfacesOnly = m_interfaces_only,
+            HideComments = m_hide_comments,
+            OutputType = m_output_type
+        };
+
+        if (m_formattable_obj?.IsFormattable == true)
+        {
+            Format(builder, m_formattable_obj);
+        }
+        else
+        {
+            return null;
+        }
+
+        String now = builder.ToString();
+        if (now[0] == '[') {
+            String[] nows = now.Split('\n');
+            for(int i=0;i<nows.Length;i++)
+            {
+                if (nows[i].Contains("uuid"))
+                {
+                    return nows[i].Split('(')[1].Split(')')[0];
+                }
+            }
+        }
+        else
+        {
+            String[] nows = now.Split('\n');
+            return nows[0].Split('(')[2].Trim('"');
+        }
+        return null;
     }
 
     internal object SelectedObject
