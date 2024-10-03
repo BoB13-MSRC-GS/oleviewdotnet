@@ -1098,53 +1098,53 @@ internal partial class COMRegistryViewer : UserControl
         /* KWAKMU18 20240918 ADDED - TEST */
         if (success == false || clsid.Interfaces.Count() < 2)
         {
-            Form popup = new Form();
-            popup.Text = "Please Wait...";
-            popup.StartPosition = FormStartPosition.CenterScreen;
-            popup.Width = 300;
-            popup.Height = 150;
+            //Form popup = new Form();
+            //popup.Text = "Please Wait...";
+            //popup.StartPosition = FormStartPosition.CenterScreen;
+            //popup.Width = 300;
+            //popup.Height = 150;
 
-            Label label = new Label();
-            label.Text = "Resolving Interfaces...";
-            label.Dock = DockStyle.Fill;
-            label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            popup.Controls.Add(label);
+            //Label label = new Label();
+            //label.Text = "Resolving Interfaces...";
+            //label.Dock = DockStyle.Fill;
+            //label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //popup.Controls.Add(label);
 
-            popup.Show();
-            string registryPath = @"Interface";
-            String classGuid = "{" + clsid.Clsid.ToString() + "}";
-            Process process = new Process();
-            process.StartInfo.FileName = "test.exe";
-            process.StartInfo.Arguments = $"{classGuid}";
-            process.StartInfo.CreateNoWindow = true;
-            process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+            //popup.Show();
+            //string registryPath = @"Interface";
+            //String classGuid = "{" + clsid.Clsid.ToString() + "}";
+            //Process process = new Process();
+            //process.StartInfo.FileName = "test.exe";
+            //process.StartInfo.Arguments = $"{classGuid}";
+            //process.StartInfo.CreateNoWindow = true;
+            //process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
 
-            try
-            {
-                process.Start();
-                process.WaitForExit();
-                int exitCode = process.ExitCode;
-            }
-            catch
-            {
-                MessageBox.Show("Failed to resolve interfaces.");
-            }
-            popup.Close();
-            process.Dispose();
-            using (StreamReader reader = new StreamReader("now.list"))
-            {
-                string line;
-                while ((line = reader.ReadLine()) != null)
-                {
-                    if (string.IsNullOrWhiteSpace(line)) break;
-                    string[] parts = line.Split(new string[] { " - " }, StringSplitOptions.None);
-                    Guid guid = new Guid(parts[0]);
-                    //if (string.IsNullOrWhiteSpace(parts[1])) node.Nodes.Add(CreateNode(parts[0].Substring(1,36), InterfaceKey, null));
-                    //else node.Nodes.Add(CreateNode(parts[1], InterfaceKey, null));
-                    COMInterfaceInstance comInterfaceInstance = new COMInterfaceInstance(guid, m_registry) ;
-                    node.Nodes.Add(CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(comInterfaceInstance.Iid), comInterfaceInstance));
-                }
-            }
+            //try
+            //{
+            //    process.Start();
+            //    process.WaitForExit();
+            //    int exitCode = process.ExitCode;
+            //}
+            //catch
+            //{
+            //    MessageBox.Show("Failed to resolve interfaces.");
+            //}
+            //popup.Close();
+            //process.Dispose();
+            //using (StreamReader reader = new StreamReader("now.list"))
+            //{
+            //    string line;
+            //    while ((line = reader.ReadLine()) != null)
+            //    {
+            //        if (string.IsNullOrWhiteSpace(line)) break;
+            //        string[] parts = line.Split(new string[] { " - " }, StringSplitOptions.None);
+            //        Guid guid = new Guid(parts[0]);
+            //        //if (string.IsNullOrWhiteSpace(parts[1])) node.Nodes.Add(CreateNode(parts[0].Substring(1,36), InterfaceKey, null));
+            //        //else node.Nodes.Add(CreateNode(parts[1], InterfaceKey, null));
+            //        COMInterfaceInstance comInterfaceInstance = new COMInterfaceInstance(guid, m_registry) ;
+            //        node.Nodes.Add(CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(comInterfaceInstance.Iid), comInterfaceInstance));
+            //    }
+            //}
         }
         /* KWAKMU18 20240918 ADDED - TEST */
     }
