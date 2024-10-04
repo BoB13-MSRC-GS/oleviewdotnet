@@ -110,7 +110,11 @@ internal partial class SourceCodeViewerControl : UserControl
         String fileName = "interfaces\\idls\\";
         if (builder.ToString().StartsWith("struct") ||
             builder.ToString().StartsWith("\nstruct") || builder.ToString().StartsWith("[switch_type") ||
-            builder.ToString().StartsWith("\nunion") || builder.ToString().StartsWith("union")) return builder.ToString();
+            builder.ToString().StartsWith("\nunion") || builder.ToString().StartsWith("union"))
+        {
+            SetText(builder.ToString());
+            return builder.ToString();
+        }
         String content;
         using (StreamWriter writer = new StreamWriter(fileName+"before.interface"))
         {
