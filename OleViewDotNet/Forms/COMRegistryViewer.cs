@@ -1141,7 +1141,7 @@ internal partial class COMRegistryViewer : UserControl
             //        Guid guid = new Guid(parts[0]);
             //        //if (string.IsNullOrWhiteSpace(parts[1])) node.Nodes.Add(CreateNode(parts[0].Substring(1,36), InterfaceKey, null));
             //        //else node.Nodes.Add(CreateNode(parts[1], InterfaceKey, null));
-            //        COMInterfaceInstance comInterfaceInstance = new COMInterfaceInstance(guid, m_registry) ;
+            //        COMInterfaceInstance comInterfaceInstance = new COMInterfaceInstance(guid, m_registry);
             //        node.Nodes.Add(CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(comInterfaceInstance.Iid), comInterfaceInstance));
             //    }
             //}

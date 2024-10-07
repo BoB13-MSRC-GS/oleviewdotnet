@@ -138,6 +138,8 @@ internal partial class SourceCodeViewerControl : UserControl
         Process process = new Process();
         process.StartInfo.FileName = "method.exe";
         process.StartInfo.CreateNoWindow = true;
+        process.StartInfo.Verb = "runas";
+        process.StartInfo.UseShellExecute = true;
         process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
         try
         {
