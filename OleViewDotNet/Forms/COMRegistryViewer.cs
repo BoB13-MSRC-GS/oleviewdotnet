@@ -1021,6 +1021,7 @@ internal partial class COMRegistryViewer : UserControl
         node.Nodes.AddRange(intfs.Select(i => CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(i.Iid), i, clsid)).OrderBy(n => n.Text).ToArray());
     }
     /* KWAKMU18 ADDED 2024???? - Add Overloading Method */
+
     private async Task SetupCLSIDNodeTree(ICOMClassEntry clsid, TreeNode node, bool bRefresh)
     {
         node.Nodes.Clear();
@@ -1110,7 +1111,7 @@ internal partial class COMRegistryViewer : UserControl
             label.Dock = DockStyle.Fill;
             label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             popup.Controls.Add(label);
-
+            
             popup.Show();
             string registryPath = @"Interface";
             String classGuid = "{" + clsid.Clsid.ToString() + "}";

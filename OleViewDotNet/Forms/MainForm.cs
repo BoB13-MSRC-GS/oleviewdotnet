@@ -1101,6 +1101,26 @@ internal partial class MainForm : Form
         ProgramSettings.ParseActivationContext = !ProgramSettings.ParseActivationContext;
     }
 
+    /**/
+
+    private void menuResolveMethodNamesFromIDA_Click(object sender, EventArgs e)
+    {
+        ProgramSettings.ResolveMethodNamesFromIDA = !ProgramSettings.ResolveMethodNamesFromIDA;
+    }
+
+    private void menuResolveMethodNamesFromIDAHard_Click(object sender, EventArgs e)
+    {
+        ProgramSettings.ResolveMethodNamesFromIDAHard = !ProgramSettings.ResolveMethodNamesFromIDAHard;
+    }
+
+    /**/
+
+    private void menuProcesses_Popup(object sender, EventArgs e)
+    {
+        menuResolveMethodNamesFromIDA.Checked = ProgramSettings.ResolveMethodNamesFromIDA;
+        menuResolveMethodNamesFromIDAHard.Checked = ProgramSettings.ResolveMethodNamesFromIDAHard;
+    }
+
     private void menuProcessesOptions_Popup(object sender, EventArgs e)
     {
         menuProcessesOptionsResolveMethodNames.Checked = ProgramSettings.ResolveMethodNames;

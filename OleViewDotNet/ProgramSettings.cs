@@ -45,6 +45,12 @@ public static class ProgramSettings
         public bool ParseStubMethods { get; set; }
         [DataMember]
         public bool ResolveMethodNames { get; set; }
+        /**/
+        [DataMember]
+        public bool ResolveMethodNamesFromIDA { get; set; }
+        [DataMember]
+        public bool ResolveMethodNamesFromIDAHard { get; set; }
+        /**/
         [DataMember]
         public bool ParseRegisteredClasses { get; set; }
         [DataMember]
@@ -176,6 +182,18 @@ public static class ProgramSettings
         get => _config.Value.ParseActivationContext;
         set => _config.Value.ParseActivationContext = value;
     }
+
+    /**/
+    public static bool ResolveMethodNamesFromIDA {
+        get => _config.Value.ResolveMethodNamesFromIDA;
+        set => _config.Value.ResolveMethodNamesFromIDA = value; 
+    }
+    public static bool ResolveMethodNamesFromIDAHard {
+        get => _config.Value.ResolveMethodNamesFromIDAHard;
+        set => _config.Value.ResolveMethodNamesFromIDAHard = value;
+    }
+
+    /**/
 
     public static bool AlwaysShowSourceCode
     {

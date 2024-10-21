@@ -120,6 +120,10 @@ partial class MainForm
             this.menuProcessesOptionsParseStubs = new System.Windows.Forms.MenuItem();
             this.menuProcessesOptionsParseRegisteredClasses = new System.Windows.Forms.MenuItem();
             this.menuProcessesOptionsParseActCtx = new System.Windows.Forms.MenuItem();
+            /**/
+            this.menuResolveMethodNamesFromIDAHard = new System.Windows.Forms.MenuItem();
+            this.menuResolveMethodNamesFromIDA = new System.Windows.Forms.MenuItem();
+            /**/
             this.menuItemStorage = new System.Windows.Forms.MenuItem();
             this.menuStorageNewStorage = new System.Windows.Forms.MenuItem();
             this.menuStorageOpenStorage = new System.Windows.Forms.MenuItem();
@@ -665,8 +669,13 @@ partial class MainForm
             this.menuProcessesSelectProcess,
             this.menuItemProcessesAllProcesses,
             this.menuItem16,
-            this.menuProcessesOptions});
+            this.menuProcessesOptions/**/,
+            this.menuResolveMethodNamesFromIDA,
+            this.menuResolveMethodNamesFromIDAHard/**/});
             this.menuProcesses.Text = "&Processes";
+            /**/
+            this.menuProcesses.Popup += new System.EventHandler(this.menuProcesses_Popup);
+            /**/
             // 
             // menuProcessesSelectProcess
             // 
@@ -740,10 +749,23 @@ partial class MainForm
             this.menuProcessesOptionsParseActCtx.Index = 3;
             this.menuProcessesOptionsParseActCtx.Text = "Parse &Activation Context";
             this.menuProcessesOptionsParseActCtx.Click += new System.EventHandler(this.menuProcessesOptionsParseActCtx_Click);
-            // 
-            // menuItemStorage
-            // 
-            this.menuItemStorage.Index = 5;
+
+            /**/
+
+            this.menuResolveMethodNamesFromIDA.Index = 4;
+            this.menuResolveMethodNamesFromIDA.Text = "Resolve Method Name by IDA";
+            this.menuResolveMethodNamesFromIDA.Click += new System.EventHandler(this.menuResolveMethodNamesFromIDA_Click);
+
+            this.menuResolveMethodNamesFromIDAHard.Index = 5;
+            this.menuResolveMethodNamesFromIDAHard.Text = "Resolve Method Name by IDA (HARD)";
+            this.menuResolveMethodNamesFromIDAHard.Click += new System.EventHandler(this.menuResolveMethodNamesFromIDAHard_Click);
+
+            /**/
+
+        // 
+        // menuItemStorage
+        // 
+        this.menuItemStorage.Index = 5;
             this.menuItemStorage.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
             this.menuStorageNewStorage,
             this.menuStorageOpenStorage});
@@ -926,6 +948,10 @@ partial class MainForm
     private System.Windows.Forms.MenuItem menuProcessesOptionsParseStubs;
     private System.Windows.Forms.MenuItem menuProcessesOptionsParseRegisteredClasses;
     private System.Windows.Forms.MenuItem menuProcessesOptionsParseActCtx;
+    /**/
+    private System.Windows.Forms.MenuItem menuResolveMethodNamesFromIDA;
+    private System.Windows.Forms.MenuItem menuResolveMethodNamesFromIDAHard;
+    /**/
     private System.Windows.Forms.MenuItem menuViewRuntimeInterfaces;
     private System.Windows.Forms.MenuItem menuViewRuntimeInterfacesTree;
     private System.Windows.Forms.MenuItem menuItemView;

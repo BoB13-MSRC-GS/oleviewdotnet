@@ -90,6 +90,7 @@ def GetInterfacesFromIDL(path):
                 if line=="\n":continue
                 now += line
                 if line.endswith("}\n"):break
+                elif line.endswith("};\n"):break
             result.append(now)
     return result
 
@@ -171,24 +172,32 @@ def GetMethodsFromIDA(binary:str, interface:str):
         if line.find("HRESULT")!=-1: methodsFromIdl.append(line)
     print(interface)
     print(methodsFromIdl)
-    
     fAsm = open("DLLs\\"+binary+".asm", "r", encoding="utf-8")
+    fAsm.seek(0,2)
+    end = fAsm.tell()
+    fAsm.seek(0,0)
     while True:
         methods = []
         line = fAsm.readline()
         if line=="\n":continue
         if line == "":break
         if line.find(f"`vftable'{{for `{interfaceName}'}}")!=-1:
-            while fAsm.readline().find("Release")==-1:
-                continue
+            while True:
+                line = fAsm.readline()
+                if line.find("?Release")!=-1:
+                    break
+                if fAsm.tell()==end:
+                    fAsm.seek(now,0)
+                    break
             methods = ["QueryInterface", "AddRef", "Release"]
             while True:
                 now = fAsm.tell()
                 line = fAsm.readline()
-                if line.startswith("                dq offset ??"):
+                if line.lstrip().find("?Release")!=-1: continue
+                if line.lstrip().startswith("dq offset ??"):
                     fAsm.seek(now,0)
                     break
-                elif line.startswith("                dq offset ?"):
+                elif line.lstrip().startswith("dq offset ?"):
                     className = ""
                     tmp = line.split(' ; ')[1].split('::')[:-1]
                     for i in range(len(tmp)):
@@ -198,7 +207,7 @@ def GetMethodsFromIDA(binary:str, interface:str):
                 else:
                     fAsm.seek(now,0)
                     break
-        if len(methods)-3==len(methodsFromIdl):ret.add(tuple(methods))
+        if len(methodsFromIdl)>=4 and 0<=len(methods)-len(methodsFromIdl)-3<=1:ret.add(tuple(methods))
     fAsm.close()
     #print("GetMethodsFromIDA failed.")
     return ret
@@ -208,9 +217,12 @@ def GetMethodsFromCandidates(binary:str, interface:str):
     methodsFromIdl = []
     for line in interface:
         if line.find("HRESULT")!=-1: methodsFromIdl.append(line)
-    print(methodsFromIdl)
+    print("methodsFromIdl :", methodsFromIdl)
     ret = set()
     fAsm = open("DLLs\\"+binary+".asm", "r", encoding="utf-8")
+    fAsm.seek(0,2)
+    end = fAsm.tell()
+    fAsm.seek(0,0)
     while True:
         methods = []
         line = fAsm.readline()
@@ -219,22 +231,34 @@ def GetMethodsFromCandidates(binary:str, interface:str):
         if line.find(f"`vftable'")!=-1:
             line = fAsm.readline()
             if line.find("QueryInterface")!=-1:
+                print("get new vftable")
                 idlIndex = 0
                 candIndex = 0
                 diffCnt=0
                 flag=True
-                while fAsm.readline().find("Release")==-1:
-                    continue
+                now = fAsm.tell()
+                while True:
+                    line = fAsm.readline()
+                    if line.find("?Release")!=-1:
+                        break
+                    if fAsm.tell()==end:
+                        fAsm.seek(now,0)
+                        flag=False
+                        break
+                    now2 = fAsm.tell()
+                if flag==False: continue
                 methods = ["QueryInterface", "AddRef", "Release"]
                 while True:
                     now = fAsm.tell()
                     line = fAsm.readline()
-                    if line.startswith("                dq offset ??"):
+                    print(line)
+                    if line.lstrip().find("?Release")!=-1: continue
+                    if line.lstrip().startswith("dq offset ??"):
                         fAsm.seek(now,0)
                         break
-                    elif line.startswith("                dq offset ?"):
+                    elif line.lstrip().startswith("dq offset ?"):
                         if idlIndex==len(methodsFromIdl):
-                            flag=False
+                            #flag=False
                             break
                         pCnt1 = CountParameters(line.split(' ; ')[1])
                         pCnt2 = CountParameters(methodsFromIdl[idlIndex])
@@ -263,8 +287,18 @@ def GetMethodsFromCandidates(binary:str, interface:str):
                     else:
                         fAsm.seek(now,0)
                         break
-                if len(methods)!=len(methodsFromIdl)+3: flag=False
-                if flag: ret.add(tuple(methods))
+                print(f"len(methods) == {len(methods)}, len(methodsFromIdl) == {len(methodsFromIdl)}", end="")
+                if len(methods)-len(methodsFromIdl)-3>1 or len(methods)-len(methodsFromIdl)-3<0:
+                    flag=False
+                if len(methodsFromIdl)>=4 and 0<=(len(methods)-3-len(methodsFromIdl))<=1:
+                    flag=True
+                if len(methods)==5 and methods[3].endswith("CreateInstance") and methods[4].endswith("LockServer"):
+                    flag=False
+                if flag:
+                    ret.add(tuple(methods))
+                    print("this is good")
+                else:
+                    print("this is bad")
     fAsm.close()
     return ret
 
@@ -369,7 +403,7 @@ def CountParameters(function_declaration):
     return len([p for p in param_list if p.strip()])
 
 def ConvertMethodName(interface, methodName):
-    print(methodName);#input()
+    print("methodName :",methodName);#input()
     if len(methodName)==0:return interface+"\n"
     result = ""
     interface = interface.split("\n")
@@ -457,22 +491,43 @@ def GetBinaryPath(name):
         path = f"SYSTEM\\ControlSet001\\Services\\{name}\\Parameters"
         key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path, 0, winreg.KEY_READ)
         name, regtype = winreg.QueryValueEx(key, "ServiceDLL")
-        return name.lower().replace("%systemroot%", "C:\\Windows").replace('"', '').replace("%programfiles%", "C:\\Program Files").replace("%windir%", "C:\\Windows").split(" ")[0]
+        #return name.lower().replace("%systemroot%", "C:\\Windows").replace('"', '').replace("%programfiles%", "C:\\Program Files").replace("%windir%", "C:\\Windows").split(" ")[0]
     except Exception as e:
         try:
             path = f"SYSTEM\\ControlSet001\\Services\\{name}"
             key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path, 0, winreg.KEY_READ)
-            name, regtype = winreg.QueryValueEx(key, "ImagePath")
-            return name.lower().replace("%systemroot%", "C:\\Windows").replace('"', '').replace("%programfiles%", "C:\\Program Files").replace("%windir%", "C:\\Windows").split(" ")[0]
+            name, regtype = winreg.QueryValueEx(key, "ServiceDLL")
+            #return name.lower().replace("%systemroot%", "C:\\Windows").replace('"', '').replace("%programfiles%", "C:\\Program Files").replace("%windir%", "C:\\Windows").split(" ")[0]
         except Exception as e:
-
-            fResult = open(RESULT_PATH, "w")
-            ErrorExit(fResult, e)
+            try:
+                path = f"SYSTEM\\ControlSet001\\Services\\{name}"
+                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path, 0, winreg.KEY_READ)
+                name, regtype = winreg.QueryValueEx(key, "ImagePath")
+                #return name.lower().replace("%systemroot%", "C:\\Windows").replace('"', '').replace("%programfiles%", "C:\\Program Files").replace("%windir%", "C:\\Windows").split(" ")[0]
+            except Exception as e:
+                fResult = open(RESULT_PATH, "w")
+                ErrorExit(fResult, e)
+    name = name.lower()
+    bef = ['%systemroot%', '"', '%programfiles%', '%windir%', '\n']
+    aft = ['C:\\Windows', '', 'C:\\Program Files', 'C:\\Windows', '']
+    for i in range(len(bef)):
+        name = name.replace(bef[i], aft[i])
+    names = name.split(" ")
+    print(name, names)
+    
+    ret = ""
+    for n in names:
+        print(n)
+        ret += n
+        ret += " "
+        if n.endswith(".exe") or n.endswith(".dll"):break
+    print("ret :", ret)
+    #input()
+    return ret.strip()
 
 IDAT_PATH = GetIDATPath(r"Local Settings\Software\Microsoft\Windows\Shell\MuiCache")
 IDL_PATH = "interfaces\\idls\\before.interface"
 RESULT_PATH = "interfaces\\idls\\after.interface"
-
 
 def main():
     fResult = open(RESULT_PATH, "w")
@@ -483,11 +538,13 @@ def main():
     SERVICE_NAME = None
     for interface in interfaces:
         if interface=="":continue
-        if interface.find("[id")!=-1:
+        print("GetIid() ==",GetIid(interface))
+        if interface.find("oleautomation")!=-1 or GetIid(interface)=="00000001-0000-0000-C000-000000000046":
+            print("NO")
             fResult.write(interface)
             continue
         path = f"interfaces\\iids\\{GetIid(interface)}.txt"
-        print(path)
+        print("path :",path)
         #input()
         if os.path.exists(path):
             fIid = open(path, "r")
@@ -525,9 +582,13 @@ def main():
             ErrorExit(fResult, "IDAT ERROR")
     fResult = open(RESULT_PATH, "w")
     for interface in interfaces[:-1]:
+        if interface.find("oleautomation")!=-1 or GetIid(interface)=="00000001-0000-0000-C000-000000000046": continue
         methods = list(GetMethodsFromIDA(BINARY_NAME, interface))
+        
+        print("now methods :", methods)
         if len(methods)==0:
             candidates = list(GetMethodsFromCandidates(BINARY_NAME, interface))
+            print("now candidates :", candidates)
             if len(candidates)==0:
                 fResult.writelines([f"// RESOLVE FAILED : {BINARY_PATH}\n"])
                 fResult.write(interface)
