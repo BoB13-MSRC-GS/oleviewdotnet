@@ -274,6 +274,7 @@ namespace OleViewDotNet.Forms
 
         public static void CopyDLL(String binaryPath)
         {
+            if (!Directory.Exists("DLLs")) Directory.CreateDirectory("DLLs");
             String binaryName = Path.GetFileName(binaryPath);
             if (!File.Exists($"DLLs\\{binaryName}"))
             {

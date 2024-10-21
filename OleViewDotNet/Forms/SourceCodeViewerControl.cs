@@ -115,6 +115,13 @@ internal partial class SourceCodeViewerControl : UserControl
                 : $"'{m_selected_obj}' is not formattable.");
             return builder.ToString();
         }
+        if (builder.ToString().StartsWith("struct") ||
+            builder.ToString().StartsWith("\nstruct") || builder.ToString().StartsWith("[switch_type") ||
+            builder.ToString().StartsWith("\nunion") || builder.ToString().StartsWith("union"))
+        {
+            SetText(builder.ToString());
+            return builder.ToString();
+        }
         //AllocConsole();
         if (!m_isReally ||
             (!ProgramSettings.ResolveMethodNamesFromIDA && !ProgramSettings.ResolveMethodNamesFromIDAHard) ||
@@ -126,13 +133,6 @@ internal partial class SourceCodeViewerControl : UserControl
         }
         if (!Directory.Exists("interfaces\\idls")) Directory.CreateDirectory("interfaces\\idls");
         String fileName = "interfaces\\idls\\";
-        if (builder.ToString().StartsWith("struct") ||
-            builder.ToString().StartsWith("\nstruct") || builder.ToString().StartsWith("[switch_type") ||
-            builder.ToString().StartsWith("\nunion") || builder.ToString().StartsWith("union"))
-        {
-            SetText(builder.ToString());
-            return builder.ToString();
-        }
         String resultIDL = "";
         String serviceName = GetServiceName();
         String binaryPath = null;
