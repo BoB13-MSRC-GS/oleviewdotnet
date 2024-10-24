@@ -1113,6 +1113,12 @@ internal partial class MainForm : Form
         ProgramSettings.ResolveMethodNamesFromIDAHard = !ProgramSettings.ResolveMethodNamesFromIDAHard;
     }
 
+    private void menuGetSequence_Click(object sender, EventArgs e)
+    {
+        CallSequenceForm callSequenceForm = new CallSequenceForm();
+        callSequenceForm.Show();
+    }
+
     /**/
 
     private void menuProcesses_Popup(object sender, EventArgs e)

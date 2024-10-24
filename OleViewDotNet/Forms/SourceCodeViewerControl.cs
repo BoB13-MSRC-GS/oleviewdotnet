@@ -115,13 +115,26 @@ internal partial class SourceCodeViewerControl : UserControl
                 : $"'{m_selected_obj}' is not formattable.");
             return builder.ToString();
         }
-        if (builder.ToString().StartsWith("struct") ||
-            builder.ToString().StartsWith("\nstruct") || builder.ToString().StartsWith("[switch_type") ||
-            builder.ToString().StartsWith("\nunion") || builder.ToString().StartsWith("union"))
+        if (//builder.ToString().StartsWith("struct") ||
+            //builder.ToString().StartsWith("\nstruct") || builder.ToString().StartsWith("[switch_type") ||
+            //builder.ToString().StartsWith("\nunion") || builder.ToString().StartsWith("union") ||
+            builder.ToString().StartsWith("ERROR:") ||
+            builder.ToString().Split('\n')[0].StartsWith("struct") || builder.ToString().Split('\n')[1].StartsWith("struct") ||
+            builder.ToString().Split('\n')[0].StartsWith("union") || builder.ToString().Split('\n')[1].StartsWith("union") ||
+            builder.ToString().Split('\n')[0].StartsWith("[switch_type") || builder.ToString().Split('\n')[1].StartsWith("[switch_type")
+            )
         {
             SetText(builder.ToString());
             return builder.ToString();
         }
+
+        if (!builder.ToString().Contains("IUnknown {"))
+        {
+            String result = "// Inheritanced class is not supported yet.\n"+builder.ToString();
+            SetText(result);
+            return result;
+        }
+
         //AllocConsole();
         if (!m_isReally ||
             (!ProgramSettings.ResolveMethodNamesFromIDA && !ProgramSettings.ResolveMethodNamesFromIDAHard) ||
@@ -234,11 +247,11 @@ internal partial class SourceCodeViewerControl : UserControl
         String resultIDL = "";
         int pid = GetServicePid(GetServiceName());
         if (pid == -1) return idl;
-
-        try
-        {
+        Form popup = null;
+        //try
+        //{
             Process process = Process.GetProcessById(pid);
-            Form popup = new Form();
+            popup = new Form();
             popup.Text = "Please Wait...";
             popup.StartPosition = FormStartPosition.CenterScreen;
             popup.Width = 300;
@@ -298,10 +311,12 @@ internal partial class SourceCodeViewerControl : UserControl
 
             popup.Close();
 
-        }
-        catch (Exception ex) {
-            return idl;
-        }
+        //}
+        //catch (Exception ex) {
+        //    Console.WriteLine(ex.Message);
+        //    popup.Close();
+        //    return idl;
+        //}
 
         if (candidates.Count == 0)
         {

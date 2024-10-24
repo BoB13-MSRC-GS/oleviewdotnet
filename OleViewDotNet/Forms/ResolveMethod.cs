@@ -389,11 +389,20 @@ namespace OleViewDotNet.Forms
                         else if (line.StartsWith("dq offset ?"))
                         {
                             //Console.WriteLine(line);
-                            String[] parts = line.Split(new String[] { " ; " }, StringSplitOptions.None)[1].
-                                Split(new String[] { "::" }, StringSplitOptions.None);
-                            String className = String.Join("::", parts, 0, parts.Length - 1);
-                            String methodName = line.Split(new String[] { "dq offset ?" }, StringSplitOptions.None)[1]
-                                .Split('@')[0];
+                            String[] parts;
+                            String className = "", methodName = "";
+                            try
+                            {
+                                parts = line.Split(new String[] { " ; " }, StringSplitOptions.None)[1].
+                                    Split(new String[] { "::" }, StringSplitOptions.None);
+                                className = String.Join("::", parts, 0, parts.Length - 1);
+                                methodName = line.Split(new String[] { "dq offset ?" }, StringSplitOptions.None)[1].Split('@')[0];
+                            }
+                            catch (IndexOutOfRangeException ex)
+                            {
+                                Console.WriteLine(ex.Message);
+                                methodName = line.Split('?')[1].Split('@')[0];
+                            }
                             methods.Add($"/*{className}*/{methodName}");
                         }
                         else
@@ -482,8 +491,17 @@ namespace OleViewDotNet.Forms
                                     flag = true;
                                     break;
                                 }
-                                int pCnt1 = CountParameters(line.Split(new String[] {" ; "}, StringSplitOptions.None)[1].Trim());
-                                int pCnt2 = CountParameters(methodsFromIdl[idlIndex].Trim());
+                                int pCnt1=0, pCnt2=0;
+                                try
+                                {
+                                    pCnt2 = CountParameters(methodsFromIdl[idlIndex].Trim());
+                                    pCnt1 = CountParameters(line.Split(new String[] { " ; " }, StringSplitOptions.None)[1].Trim());
+                                }
+                                catch (IndexOutOfRangeException ex)
+                                {
+                                    pCnt1 = pCnt2;
+                                }
+
                                 if (pCnt1 != pCnt2)
                                 {
                                     Console.WriteLine($"----------------different! {pCnt1} {pCnt2}");
@@ -505,11 +523,20 @@ namespace OleViewDotNet.Forms
                                 }
                                 
                                 Console.WriteLine($"--------------same! {pCnt1} {pCnt2} {line}");
-                                String[] parts = line.Split(new String[] { " ; " }, StringSplitOptions.None)[1].
-                                    Split(new String[] { "::" }, StringSplitOptions.None);
-                                String className = String.Join("::", parts, 0, parts.Length - 1);
-                                String methodName = line.Split(new String[] { "dq offset ?" }, StringSplitOptions.None)[1]
-                                    .Split('@')[0];
+                                String[] parts;
+                                String className="", methodName="";
+                                try
+                                {
+                                    parts = line.Split(new String[] { " ; " }, StringSplitOptions.None)[1].
+                                        Split(new String[] { "::" }, StringSplitOptions.None);
+                                    className = String.Join("::", parts, 0, parts.Length - 1);
+                                    methodName = line.Split(new String[] { "dq offset ?" }, StringSplitOptions.None)[1].Split('@')[0];
+                                }
+                                catch (IndexOutOfRangeException ex)
+                                {
+                                    Console.WriteLine(ex.Message);
+                                    methodName = line.Split('?')[1].Split('@')[0];
+                                }  
                                 methods.Add($"/*{className}*/{methodName}");
                                 idlIndex++;
                             }

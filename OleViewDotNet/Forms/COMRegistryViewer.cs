@@ -1152,6 +1152,11 @@ internal partial class COMRegistryViewer : UserControl
                 }
             }
         }
+        foreach(TreeNode nowNode in node.Nodes)
+        {
+            sourceCodeViewerControl.m_isReally = false;
+            //MessageBox.Show(nowNode.Text);
+        }
         /* KWAKMU18 20240918 ADDED - TEST */
     }
 
@@ -2550,6 +2555,7 @@ internal partial class COMRegistryViewer : UserControl
         //}
         tempNode = CreateNode("temp", FolderKey, proxy.Entries);
         tempNode.Nodes.AddRange(proxy.Entries.Select(type => CreateNode(type.Name, "temp", type)).ToArray());
+        if (!Directory.Exists("interfaces\\sequence")) Directory.CreateDirectory("interfaces\\sequence");
         using (StreamWriter writer = new StreamWriter(path, append: true))
         {
             writer.WriteLine(proxy.Path);
@@ -2567,6 +2573,25 @@ internal partial class COMRegistryViewer : UserControl
                         clsid = reader.ReadToEnd();
                         break;
                     }
+                }
+            }
+            String[] fileNames = Directory.GetFiles("interfaces\\sequence");
+
+            foreach (String file in fileNames)
+            {
+                File.Delete(file);
+            }
+            using (StreamWriter tempwriter = new StreamWriter($"interfaces\\sequence\\now"))
+            {
+                tempwriter.Write(proxy.Path);
+            }
+            foreach (TreeNode nowNode in tempNode.Nodes)
+            {
+                using (StreamWriter tempwriter = new StreamWriter($"interfaces\\sequence\\{nowNode.Text}.txt"))
+                {
+                    sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
+                    Console.WriteLine("nowNode : " + nowNode.Text);
+                    tempwriter.Write(sourceCodeViewerControl.Format());
                 }
             }
             if (clsid != null)

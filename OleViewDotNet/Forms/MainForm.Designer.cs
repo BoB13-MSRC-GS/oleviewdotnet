@@ -123,6 +123,7 @@ partial class MainForm
             /**/
             this.menuResolveMethodNamesFromIDAHard = new System.Windows.Forms.MenuItem();
             this.menuResolveMethodNamesFromIDA = new System.Windows.Forms.MenuItem();
+            this.menuGetSequence = new System.Windows.Forms.MenuItem();
             /**/
             this.menuItemStorage = new System.Windows.Forms.MenuItem();
             this.menuStorageNewStorage = new System.Windows.Forms.MenuItem();
@@ -671,7 +672,8 @@ partial class MainForm
             this.menuItem16,
             this.menuProcessesOptions/**/,
             this.menuResolveMethodNamesFromIDA,
-            this.menuResolveMethodNamesFromIDAHard/**/});
+            this.menuResolveMethodNamesFromIDAHard,
+            this.menuGetSequence/**/});
             this.menuProcesses.Text = "&Processes";
             /**/
             this.menuProcesses.Popup += new System.EventHandler(this.menuProcesses_Popup);
@@ -759,6 +761,10 @@ partial class MainForm
             this.menuResolveMethodNamesFromIDAHard.Index = 5;
             this.menuResolveMethodNamesFromIDAHard.Text = "Resolve Method Name by IDA (HARD)";
             this.menuResolveMethodNamesFromIDAHard.Click += new System.EventHandler(this.menuResolveMethodNamesFromIDAHard_Click);
+
+            this.menuGetSequence.Index = 6;
+            this.menuGetSequence.Text = "Get Call Sequence";
+            this.menuGetSequence.Click += new System.EventHandler(this.menuGetSequence_Click);
 
             /**/
 
@@ -951,6 +957,7 @@ partial class MainForm
     /**/
     private System.Windows.Forms.MenuItem menuResolveMethodNamesFromIDA;
     private System.Windows.Forms.MenuItem menuResolveMethodNamesFromIDAHard;
+    private System.Windows.Forms.MenuItem menuGetSequence;
     /**/
     private System.Windows.Forms.MenuItem menuViewRuntimeInterfaces;
     private System.Windows.Forms.MenuItem menuViewRuntimeInterfacesTree;
