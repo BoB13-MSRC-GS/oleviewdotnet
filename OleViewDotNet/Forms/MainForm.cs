@@ -1115,6 +1115,7 @@ internal partial class MainForm : Form
 
     private void menuGetSequence_Click(object sender, EventArgs e)
     {
+        if (!Directory.Exists("interfaces\\sequence")) Directory.CreateDirectory("interfaces\\sequence");
         CallSequenceForm callSequenceForm = new CallSequenceForm();
         callSequenceForm.Show();
     }

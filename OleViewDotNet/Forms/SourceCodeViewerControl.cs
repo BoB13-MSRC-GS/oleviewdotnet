@@ -155,6 +155,14 @@ internal partial class SourceCodeViewerControl : UserControl
         m_success = true;
         List<List<String>> methods = Resolve(builder.ToString(), binaryPath);
 
+        if (methods == null)
+        {
+            resultIDL += "// Resolve Failed.";
+            resultIDL += builder.ToString();
+            SetText(resultIDL);
+            return resultIDL;
+        }
+
         if (methods.Count == 0)
         {
             if (ProgramSettings.ResolveMethodNamesFromIDAHard)
@@ -248,75 +256,80 @@ internal partial class SourceCodeViewerControl : UserControl
         int pid = GetServicePid(GetServiceName());
         if (pid == -1) return idl;
         Form popup = null;
-        //try
-        //{
-            Process process = Process.GetProcessById(pid);
-            popup = new Form();
-            popup.Text = "Please Wait...";
-            popup.StartPosition = FormStartPosition.CenterScreen;
-            popup.Width = 300;
-            popup.Height = 150;
+        Process process = Process.GetProcessById(pid);
+        popup = new Form();
+        popup.Text = "Please Wait...";
+        popup.StartPosition = FormStartPosition.CenterScreen;
+        popup.Width = 300;
+        popup.Height = 150;
 
-            Label label = new Label();
-            label.Text = "Resolving Start.";
-            //label.Dock = DockStyle.Fill;
-            label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            label.Size = new System.Drawing.Size(280, 30);
-            label.Location = new System.Drawing.Point(10, 10);
-            popup.Controls.Add(label);
+        Label label = new Label();
+        label.Text = "Resolving Start.";
+        //label.Dock = DockStyle.Fill;
+        label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+        label.Size = new System.Drawing.Size(280, 30);
+        label.Location = new System.Drawing.Point(10, 10);
+        popup.Controls.Add(label);
 
-            ProgressBar progressBar = new ProgressBar();
-            progressBar.Minimum = 0;   // 최소값
-            progressBar.Maximum = 100; // 최대값
-            progressBar.Value = 0;     // 초기값
-            //progressBar.Width = 200;   // 너비
-            //progressBar.Height = 30;   // 높이
-            progressBar.Step = 100/process.Modules.Count;      // 한 번에 증가할 값
-            progressBar.Size = new System.Drawing.Size(260, 30);
-            progressBar.Location = new System.Drawing.Point(10, 80);
+        ProgressBar progressBar = new ProgressBar();
+        progressBar.Minimum = 0;   // 최소값
+        progressBar.Maximum = 100; // 최대값
+        progressBar.Value = 0;     // 초기값
+        //progressBar.Width = 200;   // 너비
+        //progressBar.Height = 30;   // 높이
+        progressBar.Step = 100/process.Modules.Count;      // 한 번에 증가할 값
+        progressBar.Size = new System.Drawing.Size(260, 30);
+        progressBar.Location = new System.Drawing.Point(10, 80);
 
-            popup.Controls.Add(progressBar);
-            popup.Show();
-            for (int i=0;i<process.Modules.Count;i++)
+        popup.Controls.Add(progressBar);
+        popup.Show();
+        for (int i=0;i<process.Modules.Count;i++)
+        {
+            label.Text = $"Trying to resolve from {process.Modules[i].FileName}";
+            label.Update();
+            progressBar.PerformStep();
+            progressBar.Update();
+            bool flag = true;
+            if (ResolveMethod.banList == null && File.Exists("BanList"))
             {
-                label.Text = $"Trying to resolve from {process.Modules[i].FileName}";
-                label.Update();
-                progressBar.PerformStep();
-                progressBar.Update();
-                bool flag = true;
-                for(int j=0;j<ResolveMethod.banList.Length;j++)
+                ResolveMethod.banList = new List<string>();
+                using (StreamReader reader = new StreamReader("BanList"))
                 {
-                    if (ResolveMethod.banList[j].ToLower() == process.Modules[i].FileName.ToLower())
+                    while (true)
                     {
-                        flag = false;
-                        break;
+                        String nowLine = reader.ReadLine();
+                        if (nowLine == null) break;
+                        ResolveMethod.banList.Add(nowLine);
                     }
                 }
-                if (flag)
-                {
-                    List<List<String>> methods = Resolve(idl, process.Modules[i].FileName, false);
-                    if (methods.Count > 0)
-                    {
-                        candidates.Add(methods);
-                        resultIDL += $"// {process.Modules[i].FileName}\n";
-                        for (int j = 0; j < methods.Count; j++)
-                        {
-                            resultIDL += $"// Candidates {j + 1}\n";
-                            resultIDL += ResolveMethod.ConvertMethodName(idl, methods[j]);
-                        }
-                    }
-                }
-                
             }
+            else if (!File.Exists("BanList")) File.Create("BanList").Close();
+            for(int j=0;j<ResolveMethod.banList.Count;j++)
+            {
+                if (ResolveMethod.banList[j].ToLower() == process.Modules[i].FileName.ToLower())
+                {
+                    flag = false;
+                    break;
+                }
+            }
+            if (flag)
+            {
+                List<List<String>> methods = Resolve(idl, process.Modules[i].FileName, false);
+                if (methods.Count > 0)
+                {
+                    candidates.Add(methods);
+                    resultIDL += $"// {process.Modules[i].FileName}\n";
+                    for (int j = 0; j < methods.Count; j++)
+                    {
+                        resultIDL += $"// Candidates {j + 1}\n";
+                        resultIDL += ResolveMethod.ConvertMethodName(idl, methods[j]);
+                    }
+                }
+            }
+                
+        }
 
-            popup.Close();
-
-        //}
-        //catch (Exception ex) {
-        //    Console.WriteLine(ex.Message);
-        //    popup.Close();
-        //    return idl;
-        //}
+        popup.Close();
 
         if (candidates.Count == 0)
         {
@@ -346,7 +359,11 @@ internal partial class SourceCodeViewerControl : UserControl
             popup.Show();
         }
 
-        ResolveMethod.GenerateAsmFile(binaryPath);
+        if (!ResolveMethod.GenerateAsmFile(binaryPath))
+        {
+            popup.Close();
+            return null;
+        }
 
         String interfaceName = ResolveMethod.GetInterfaceName(idl);
         Console.WriteLine(interfaceName);

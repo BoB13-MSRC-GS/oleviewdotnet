@@ -9,162 +9,27 @@ using System.Windows.Forms;
 using System.IO;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using System.Runtime.CompilerServices;
 
 namespace OleViewDotNet.Forms
 {
-    internal class ResolveMethod:Form
+    internal class ResolveMethod
     {
-
-        public static String[] banList = 
-        {
-            "C:\\WINDOWS\\SYSTEM32\\MSASN1.dll",
-            "C:\\WINDOWS\\SYSTEM32\\dxcore.dll",
-            "C:\\WINDOWS\\SYSTEM32\\twinapi.appcore.dll",
-            "C:\\WINDOWS\\SYSTEM32\\wevtapi.dll",
-            "C:\\WINDOWS\\SYSTEM32\\winsta.dll",
-            "C:\\WINDOWS\\System32\\WINSTA.dll",
-            "C:\\WINDOWS\\System32\\profapi.dll",
-            "C:\\WINDOWS\\system32\\MSASN1.dll",
-            "C:\\WINDOWS\\system32\\ncryptprov.dll",
-            "C:\\Windows\\System32\\Microsoft.Bluetooth.Proxy.dll",
-            "C:\\Windows\\System32\\SspiCli.dll",
-            "C:\\Windows\\System32\\Windows.Security.Authentication.OnlineId.dll",
-            "C:\\Windows\\System32\\XmlLite.dll",
-            "C:\\Windows\\System32\\msxml6.dll",
-            "C:\\Windows\\System32\\vaultcli.dll",
-            "c:\\windows\\system32\\BrokerLib.dll",
-            "c:\\windows\\system32\\PROPSYS.dll",
-            "c:\\windows\\system32\\WMICLNT.dll",
-            "c:\\windows\\system32\\fwbase.dll",
-            "c:\\windows\\system32\\wlanapi.dll",
-            "C:\\WINDOWS\\SYSTEM32\\IPHLPAPI.DLL",
-            "C:\\WINDOWS\\SYSTEM32\\bi.dll",
-            "C:\\WINDOWS\\SYSTEM32\\capauthz.dll",
-            "C:\\WINDOWS\\System32\\CRYPTBASE.DLL",
-            "C:\\WINDOWS\\System32\\NTASN1.dll",
-            "C:\\WINDOWS\\System32\\SETUPAPI.dll",
-            "C:\\WINDOWS\\System32\\SHLWAPI.dll",
-            "C:\\WINDOWS\\System32\\SspiCli.dll",
-            "C:\\WINDOWS\\System32\\fwpuclnt.dll",
-            "C:\\WINDOWS\\System32\\ncrypt.dll",
-            "C:\\WINDOWS\\System32\\netutils.dll",
-            "C:\\WINDOWS\\System32\\sspicli.dll",
-            "C:\\WINDOWS\\System32\\wkscli.dll",
-            "C:\\Windows\\System32\\AppXDeploymentClient.dll",
-            "c:\\windows\\system32\\WppRecorderUM.dll",
-            "c:\\windows\\system32\\netutils.dll",
-            "C:\\WINDOWS\\SYSTEM32\\netjoin.dll",
-            "C:\\WINDOWS\\SYSTEM32\\netutils.dll",
-            "C:\\WINDOWS\\System32\\CRYPTBASE.dll",
-            "C:\\WINDOWS\\System32\\DPAPI.DLL",
-            "C:\\WINDOWS\\System32\\SHCORE.dll",
-            "C:\\WINDOWS\\System32\\SHELL32.dll",
-            "C:\\WINDOWS\\System32\\netprofm.dll",
-            "C:\\WINDOWS\\system32\\execmodelproxy.dll",
-            "C:\\Windows\\System32\\Windows.Networking.Connectivity.dll",
-            "C:\\Windows\\System32\\Windows.Web.dll",
-            "C:\\Windows\\System32\\iertutil.dll",
-            "C:\\Windows\\System32\\msvcp110_win.dll",
-            "C:\\Windows\\System32\\netutils.dll",
-            "C:\\Windows\\System32\\srvcli.dll",
-            "C:\\Windows\\System32\\usermgrproxy.dll",
-            "c:\\windows\\system32\\DNSAPI.dll",
-            "c:\\windows\\system32\\DSROLE.dll",
-            "c:\\windows\\system32\\MobileNetworking.dll",
-            "c:\\windows\\system32\\SYSNTFY.dll",
-            "c:\\windows\\system32\\WINSTA.dll",
-            "c:\\windows\\system32\\WTSAPI32.dll",
-            "c:\\windows\\system32\\fwpuclnt.dll",
-            "c:\\windows\\system32\\AUTHZ.dll",
-            "c:\\windows\\system32\\NTASN1.dll",
-            "c:\\windows\\system32\\ncrypt.dll",
-            "C:\\WINDOWS\\SYSTEM32\\wlanapi.dll",
-            "C:\\WINDOWS\\System32\\DEVOBJ.dll",
-            "C:\\WINDOWS\\system32\\ncryptsslp.dll",
-            "C:\\WINDOWS\\system32\\schannel.DLL",
-            "C:\\WINDOWS\\system32\\sspicli.dll",
-            "C:\\Windows\\System32\\taskschd.dll",
-            "c:\\windows\\system32\\WINNSI.DLL",
-            "C:\\WINDOWS\\SYSTEM32\\SspiCli.dll",
-            "C:\\WINDOWS\\SYSTEM32\\profapi.dll",
-            "C:\\WINDOWS\\System32\\IMM32.DLL",
-            "C:\\WINDOWS\\System32\\coml2.dll",
-            "C:\\Windows\\System32\\CapabilityAccessManagerClient.dll",
-            "C:\\Windows\\System32\\Windows.StateRepositoryPS.dll",
-            "C:\\WINDOWS\\SYSTEM32\\windows.staterepositoryclient.dll",
-            "C:\\WINDOWS\\System32\\WINTRUST.dll",
-            "C:\\WINDOWS\\system32\\CRYPTBASE.dll",
-            "C:\\Windows\\System32\\WinTypes.dll",
-            "c:\\windows\\system32\\webio.dll",
-            "C:\\WINDOWS\\SYSTEM32\\MobileNetworking.dll",
-            "C:\\WINDOWS\\System32\\ADVAPI32.dll",
-            "C:\\Windows\\System32\\twinapi.appcore.dll",
-            "c:\\windows\\system32\\UMPDC.dll",
-            "C:\\WINDOWS\\SYSTEM32\\cryptsp.dll",
-            "C:\\Windows\\System32\\OneCoreCommonProxyStub.dll",
-            "c:\\windows\\system32\\WINHTTP.dll",
-            "c:\\windows\\system32\\profapi.dll",
-            "C:\\WINDOWS\\System32\\npmproxy.dll",
-            "c:\\windows\\system32\\SspiCli.dll",
-            "c:\\windows\\system32\\msvcp110_win.dll",
-            "C:\\WINDOWS\\System32\\MSASN1.dll",
-            "c:\\windows\\system32\\DEVOBJ.dll",
-            "C:\\WINDOWS\\SYSTEM32\\WINSTA.dll",
-            "C:\\Windows\\System32\\OneCoreUAPCommonProxyStub.dll",
-            "C:\\Windows\\System32\\rasadhlp.dll",
-            "C:\\WINDOWS\\SYSTEM32\\windows.staterepositorycore.dll",
-            "C:\\WINDOWS\\System32\\shlwapi.dll",
-            "C:\\WINDOWS\\system32\\rsaenh.dll",
-            "c:\\windows\\system32\\USERENV.dll",
-            "C:\\WINDOWS\\SYSTEM32\\DNSAPI.dll",
-            "C:\\WINDOWS\\SYSTEM32\\WINNSI.DLL",
-            "C:\\WINDOWS\\SYSTEM32\\policymanager.dll",
-            "C:\\WINDOWS\\SYSTEM32\\rmclient.dll",
-            "C:\\WINDOWS\\SYSTEM32\\windows.storage.dll",
-            "C:\\WINDOWS\\SYSTEM32\\dhcpcsvc.DLL",
-            "C:\\WINDOWS\\SYSTEM32\\dhcpcsvc6.DLL",
-            "C:\\WINDOWS\\SYSTEM32\\gpapi.dll",
-            "C:\\WINDOWS\\SYSTEM32\\usermgrcli.dll",
-            "C:\\WINDOWS\\SYSTEM32\\wtsapi32.dll",
-            "C:\\WINDOWS\\SYSTEM32\\wintypes.dll",
-            "C:\\WINDOWS\\System32\\ole32.dll",
-            "c:\\windows\\system32\\IPHLPAPI.DLL",
-            "C:\\WINDOWS\\SYSTEM32\\UMPDC.dll",
-            "C:\\WINDOWS\\SYSTEM32\\ntmarta.dll",
-            "C:\\WINDOWS\\system32\\mswsock.dll",
-            "C:\\WINDOWS\\System32\\svchost.exe",
-            "C:\\WINDOWS\\System32\\CRYPT32.dll",
-            "C:\\WINDOWS\\SYSTEM32\\powrprof.dll",
-            "C:\\WINDOWS\\System32\\NSI.dll",
-            "C:\\WINDOWS\\SYSTEM32\\cfgmgr32.dll",
-            "C:\\WINDOWS\\System32\\WS2_32.dll",
-            "C:\\WINDOWS\\System32\\shcore.dll",
-            "C:\\WINDOWS\\System32\\advapi32.dll",
-            "C:\\WINDOWS\\system32\\svchost.exe",
-            "C:\\WINDOWS\\System32\\OLEAUT32.dll",
-            "C:\\WINDOWS\\System32\\clbcatq.dll",
-            "C:\\WINDOWS\\System32\\user32.dll",
-            "C:\\WINDOWS\\System32\\GDI32.dll",
-            "C:\\WINDOWS\\System32\\gdi32full.dll",
-            "C:\\WINDOWS\\System32\\win32u.dll",
-            "C:\\WINDOWS\\SYSTEM32\\kernel.appcore.dll",
-            "C:\\WINDOWS\\System32\\bcryptPrimitives.dll",
-            "C:\\WINDOWS\\SYSTEM32\\ntdll.dll",
-            "C:\\WINDOWS\\System32\\KERNEL32.DLL",
-            "C:\\WINDOWS\\System32\\KERNELBASE.dll",
-            "C:\\WINDOWS\\System32\\RPCRT4.dll",
-            "C:\\WINDOWS\\System32\\bcrypt.dll",
-            "C:\\WINDOWS\\System32\\combase.dll",
-            "C:\\WINDOWS\\System32\\msvcp_win.dll",
-            "C:\\WINDOWS\\System32\\msvcrt.dll",
-            "C:\\WINDOWS\\System32\\sechost.dll",
-            "C:\\WINDOWS\\System32\\ucrtbase.dll",
-            "C:\\WINDOWS\\System32\\d3d11.dll",
-            "C:\\WINDOWS\\System32\\d2d1.dll"
-        };
+        public static String IDAPath = null;
+        public static List<String> banList = null;
 
         public static String GetIDAT()
         {
+
+            if (File.Exists("IDAPath"))
+            {
+                using (StreamReader reader = new StreamReader("IDAPath"))
+                {
+                    IDAPath = reader.ReadToEnd();
+                }
+                return IDAPath;
+            }
+
             string regKey = "Local Settings\\Software\\Microsoft\\Windows\\Shell\\MuiCache";
             try
             {
@@ -175,7 +40,7 @@ namespace OleViewDotNet.Forms
                         foreach (string valueName in key.GetValueNames())
                         {
                             object valueData = key.GetValue(valueName);
-
+                            Console.WriteLine($"Now Searching : {valueName} {valueData}");
                             if (valueData is string stringValue && stringValue.Contains("Hex-Rays SA"))
                             {
                                 Console.WriteLine($"Found 'Hex-Rays SA' in: {valueName}");
@@ -183,7 +48,10 @@ namespace OleViewDotNet.Forms
                                 String[] parts = valueName.Split('\\');
                                 String fileName = String.Join("\\", parts, 0, parts.Length - 1)+"\\idat64.exe";
                                 Console.WriteLine("IDAT Path : "+fileName);
-                                if (File.Exists(fileName)) return fileName;
+                                if (File.Exists(fileName))
+                                {
+                                    IDAPath = fileName;
+                                }
                             }
                         }
                     }
@@ -197,8 +65,21 @@ namespace OleViewDotNet.Forms
             {
                 Console.WriteLine($"GetIDAT(): {ex.Message}");
             }
-            MessageBox.Show("Failed to find idat64.exe.");
-            return null;
+
+            if (IDAPath == null)
+            {
+                MessageBox.Show("Failed to find idat64.exe.");
+
+                IDAPathForm iDAPathForm = new IDAPathForm();
+                iDAPathForm.ShowDialog();
+            }
+
+            using (StreamWriter writer = new StreamWriter("IDAPath"))
+            {
+                writer.Write(IDAPath);
+            }
+
+            return IDAPath;
         }
 
         public static String GetBinaryPath(String serviceName)
@@ -283,14 +164,18 @@ namespace OleViewDotNet.Forms
             }
         }
 
-        public static void GenerateAsmFile(String binaryPath)
+        public static bool GenerateAsmFile(String binaryPath)
         {
             String binaryName = Path.GetFileName(binaryPath);
-            if (File.Exists($"DLLs\\{binaryName}" + ".asm")) return;
+            if (File.Exists($"DLLs\\{binaryName}" + ".asm")) return true;
             CopyDLL(binaryPath);
-            Console.WriteLine("GenerateAsmFile() Start." + binaryName);
+            Console.WriteLine("GenerateAsmFile() Start. " + binaryName);
             Process process = new Process();
-            process.StartInfo.FileName = GetIDAT();
+            if (IDAPath == null) process.StartInfo.FileName = GetIDAT();
+            process.StartInfo.FileName = IDAPath;
+            Console.WriteLine($"IDAT Path : {IDAPath}");
+            //process.StartInfo.FileName = GetIDAT();
+            //if (process.StartInfo.FileName == null) return false;
             process.StartInfo.Arguments = $"-A -B DLLs\\{binaryName}";
             process.StartInfo.CreateNoWindow = true;
             process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
@@ -308,6 +193,7 @@ namespace OleViewDotNet.Forms
             }
             process.Dispose();
             Console.WriteLine("GenerateAsmFile() Done.");
+            return true;
         }
 
         public static String GetInterfaceName(String idl)
@@ -342,11 +228,20 @@ namespace OleViewDotNet.Forms
 
             String binaryName = Path.GetFileName(binaryPath);
             String interfaceName = GetInterfaceName(idl);
+            if (!File.Exists($"DLLs\\{binaryName}.asm")) return ret;
             using (StreamReader reader = new StreamReader($"DLLs\\{binaryName}.asm"))
             {
-                asmLines = reader.ReadToEnd().Split('\n');
+                String asm = reader.ReadToEnd();
+                
+                if (!asm.Contains("QueryInterface"))
+                {
+                    using (StreamWriter writer = new StreamWriter("BanList", true))
+                    {
+                        writer.Write("\n"+binaryPath);
+                    }
+                }
+                asmLines = asm.Split('\n');
             }
-
             int lineIndex = 0;
             while (true)
             {
@@ -434,6 +329,7 @@ namespace OleViewDotNet.Forms
 
             String binaryName = Path.GetFileName(binaryPath);
             String interfaceName = GetInterfaceName(idl);
+            if (!File.Exists($"DLLs\\{binaryName}.asm")) return ret;
             using (StreamReader reader = new StreamReader($"DLLs\\{binaryName}.asm"))
             {
                 asmLines = reader.ReadToEnd().Split('\n');

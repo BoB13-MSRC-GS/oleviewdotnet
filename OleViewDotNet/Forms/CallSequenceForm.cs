@@ -102,7 +102,6 @@ namespace OleViewDotNet.Forms
             Console.WriteLine($"CountParameters() Processing : {functionDeclaration}");
             if (functionDeclaration.Trim().EndsWith("(void)"))
                 return new List<string>();
-
             // 템플릿 인자 제거
             string functionDefinition = Regex.Replace(functionDeclaration, @"<.*?>", "");
             Console.WriteLine($"CountParameters() functionDefinition : {functionDefinition}");

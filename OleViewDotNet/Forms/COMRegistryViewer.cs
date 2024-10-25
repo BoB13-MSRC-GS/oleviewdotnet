@@ -1152,11 +1152,6 @@ internal partial class COMRegistryViewer : UserControl
                 }
             }
         }
-        foreach(TreeNode nowNode in node.Nodes)
-        {
-            sourceCodeViewerControl.m_isReally = false;
-            //MessageBox.Show(nowNode.Text);
-        }
         /* KWAKMU18 20240918 ADDED - TEST */
     }
 
