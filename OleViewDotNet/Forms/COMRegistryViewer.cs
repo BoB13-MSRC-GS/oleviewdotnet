@@ -2103,7 +2103,6 @@ internal partial class COMRegistryViewer : UserControl
                 {
                     COMProxyFile proxy_file = COMProxyFile.GetFromCLSID(clsid);
                     COMProxyTypeInfo visible_interface = proxy_file.Entries.Where(e => e.Iid == selected_iid).FirstOrDefault();
-
                     EntryPoint.GetMainForm(m_registry).HostControl(
                         new COMRegistryViewer(
                             m_registry,
@@ -2582,10 +2581,9 @@ internal partial class COMRegistryViewer : UserControl
             }
             foreach (TreeNode nowNode in tempNode.Nodes)
             {
-                using (StreamWriter tempwriter = new StreamWriter($"interfaces\\sequence\\{nowNode.Text}.txt"))
+                sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
+                using (StreamWriter tempwriter = new StreamWriter($"interfaces\\sequence\\{sourceCodeViewerControl.GetIid()}.txt"))
                 {
-                    sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
-                    Console.WriteLine("nowNode : " + nowNode.Text);
                     tempwriter.Write(sourceCodeViewerControl.Format());
                 }
             }

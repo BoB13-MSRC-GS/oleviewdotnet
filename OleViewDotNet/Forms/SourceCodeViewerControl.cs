@@ -113,6 +113,7 @@ internal partial class SourceCodeViewerControl : UserControl
             builder.AppendLine(m_selected_obj is null ?
                 "No formattable object selected"
                 : $"'{m_selected_obj}' is not formattable.");
+            SetText(builder.ToString());
             return builder.ToString();
         }
         if (//builder.ToString().StartsWith("struct") ||
@@ -150,7 +151,11 @@ internal partial class SourceCodeViewerControl : UserControl
         String serviceName = GetServiceName();
         String binaryPath = null;
         if (serviceName != null) binaryPath = ResolveMethod.GetBinaryPath(serviceName);
-        else return builder.ToString();
+        else
+        {
+            SetText(builder.ToString());
+            return builder.ToString();
+        }
 
         m_success = true;
         List<List<String>> methods = Resolve(builder.ToString(), binaryPath);
@@ -186,8 +191,6 @@ internal partial class SourceCodeViewerControl : UserControl
         }
 
         SetText(resultIDL);
-
-        
 
         //popup.Close();
 
@@ -277,7 +280,16 @@ internal partial class SourceCodeViewerControl : UserControl
         progressBar.Value = 0;     // 초기값
         //progressBar.Width = 200;   // 너비
         //progressBar.Height = 30;   // 높이
-        progressBar.Step = 100/process.Modules.Count;      // 한 번에 증가할 값
+        try
+        {
+            progressBar.Step = 100 / process.Modules.Count;      // 한 번에 증가할 값
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            resultIDL += "// Fail to Resolve Hard. Access Denied.\n";
+            resultIDL += idl;
+            return resultIDL;
+        }
         progressBar.Size = new System.Drawing.Size(260, 30);
         progressBar.Location = new System.Drawing.Point(10, 80);
 

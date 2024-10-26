@@ -17,6 +17,7 @@ namespace OleViewDotNet.Forms
     {
         Dictionary<String, List<String>> interfaces = null;
         List<List<String>> sequence;
+
         public CallSequenceForm()
         {
             String[] fileNames = Directory.GetFiles("interfaces\\sequence");
@@ -30,6 +31,7 @@ namespace OleViewDotNet.Forms
             if (interfaces == null)
             {
                 interfaces = new Dictionary<String, List<String>>();
+                var stringList = new List<String>();
                 foreach (String file in fileNames)
                 {
                     String idl = null;
@@ -55,7 +57,7 @@ namespace OleViewDotNet.Forms
                             break;
                         }
                     }
-                    comboBox1.Items.Add(interfaceName);
+                    stringList.Add(interfaceName);
                     Console.WriteLine("interfaceName : " + interfaceName);
                     interfaces[interfaceName] = new List<String>();
                     for (int i = 0; i < lines.Length; i++)
@@ -84,15 +86,8 @@ namespace OleViewDotNet.Forms
                         }
                     }
                 }
-                foreach (String i in interfaces.Keys)
-                {
-                    Console.Write(i + " : ");
-                    foreach (String j in interfaces[i])
-                    {
-                        Console.Write(j + " ");
-                    }
-                    Console.WriteLine();
-                }
+                stringList.Sort();
+                comboBox1.DataSource = stringList;
             }
             
         }
