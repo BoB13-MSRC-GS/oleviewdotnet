@@ -50,6 +50,10 @@ public static class ProgramSettings
         public bool ResolveMethodNamesFromIDA { get; set; }
         [DataMember]
         public bool ResolveMethodNamesFromIDAHard { get; set; }
+        [DataMember]
+        public bool ResolveMethodDllFix {get; set;}
+        [DataMember]
+        public String FixedDll { get; set; }
         /**/
         [DataMember]
         public bool ParseRegisteredClasses { get; set; }
@@ -191,6 +195,17 @@ public static class ProgramSettings
     public static bool ResolveMethodNamesFromIDAHard {
         get => _config.Value.ResolveMethodNamesFromIDAHard;
         set => _config.Value.ResolveMethodNamesFromIDAHard = value;
+    }
+
+    public static bool ResolveMethodDllFix {
+        get => _config.Value.ResolveMethodDllFix;
+        set => _config.Value.ResolveMethodDllFix = value;
+    }
+
+    public static String FixedDll
+    {
+        get => _config.Value.FixedDll;
+        set => _config.Value.FixedDll = value;
     }
 
     /**/

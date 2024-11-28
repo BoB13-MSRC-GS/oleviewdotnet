@@ -213,18 +213,66 @@ namespace OleViewDotNet.Forms
             return null;
         }
 
+        public static int GetLastProcNumFromIdl(String idl)
+        {
+            String[] lines = idl.Split('\n');
+            for(int i=0;i<lines.Length;i++) 
+            {
+                if (lines[i].Contains("}"))
+                {
+                    string pattern = @"(?<=Proc)\d+";
+
+                    Match match = Regex.Match(lines[i-1], pattern);
+                    if (match.Success)
+                    {
+                        return int.Parse(match.Value);
+                    }
+                    else return -1;
+                }
+            }
+            return -1;
+        }
+
+        public static int GetFirstProcNumFromIdl(String idl)
+        {
+            String[] lines = idl.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("HRESULT"))
+                {
+                    string pattern = @"(?<=Proc)\d+";
+
+                    Match match = Regex.Match(lines[i], pattern);
+                    if (match.Success)
+                    {
+                        return int.Parse(match.Value);
+                    }
+                    else return -1;
+                }
+            }
+            return -1;
+        }
+
         public static List<List<String>> GetMethodsFromIDA(String binaryPath, String idl)
         {
-            
             List<List<String>> ret = new List<List<String>>();
-            List<String> methodsFromIdl = new List<String>();
+            //List<String> methodsFromIdl = new List<String>();
             String[] asmLines = null;
             String[] idlLines = idl.Split('\n');
 
-            foreach (String line in idlLines)
+            int firstProcNum = GetFirstProcNumFromIdl(idl);
+            int lastProcNum = GetLastProcNumFromIdl(idl);
+            int idlMethodCnt;
+            if (firstProcNum == -1 || lastProcNum == -1)
             {
-                if (line.Contains("HRESULT")) methodsFromIdl.Add(line);
+                Console.WriteLine($"firstProcNum {firstProcNum} lastProcNum {lastProcNum}");
+                return ret;
             }
+            else idlMethodCnt = lastProcNum - firstProcNum + 1;
+            //foreach (String line in idlLines)
+            //{
+            //    if (line.Contains("HRESULT")) methodsFromIdl.Add(line);
+            //}
 
             String binaryName = Path.GetFileName(binaryPath);
             String interfaceName = GetInterfaceName(idl);
@@ -251,7 +299,7 @@ namespace OleViewDotNet.Forms
                 
                 if (line.Contains($"`vftable'{{for `{interfaceName}'}}"))
                 {
-                    //Console.WriteLine("Got New vftable : "+line);
+                    Console.WriteLine("Got New vftable : "+line);
                     int nowIndex = lineIndex;
                     bool flag = false;
                     while (true)
@@ -305,7 +353,8 @@ namespace OleViewDotNet.Forms
                             break;
                         }
                     }
-                    if (methods.Count >= 4 && (methods.Count - methodsFromIdl.Count - 3) >= 0 && (methods.Count - methodsFromIdl.Count - 3) <= 1)
+                    //if (methods.Count >= 4 && (methods.Count - methodsFromIdl.Count - 3) >= 0 && (methods.Count - methodsFromIdl.Count - 3) <= 1)
+                    if (methods.Count >= 4 && (methods.Count - (lastProcNum - firstProcNum + 1) - 3) >= 0 && (methods.Count - (lastProcNum - firstProcNum + 1) - 3) <= 1)
                     {
                         ret.Add(methods);
                     }
@@ -321,6 +370,16 @@ namespace OleViewDotNet.Forms
             List<String> methodsFromIdl = new List<String>();
             String[] asmLines = null;
             String[] idlLines = idl.Split('\n');
+
+            int firstProcNum = GetFirstProcNumFromIdl(idl);
+            int lastProcNum = GetLastProcNumFromIdl(idl);
+            int idlMethodCnt;
+            if (firstProcNum == -1 || lastProcNum == -1)
+            {
+                Console.WriteLine($"firstProcNum {firstProcNum} lastProcNum {lastProcNum}");
+                return ret;
+            }
+            else idlMethodCnt = lastProcNum - firstProcNum + 1;
 
             foreach (String line in idlLines)
             {
@@ -349,6 +408,7 @@ namespace OleViewDotNet.Forms
                     {
                         Console.WriteLine("Got New vftable : "+line);
                         int idlIndex = 0;
+                        int startIndex = 3;
                         int diffCnt = 0;
                         int nowIndex = lineIndex;
                         int diffBase = 0;
@@ -374,6 +434,7 @@ namespace OleViewDotNet.Forms
                         {
                             nowIndex = lineIndex;
                             line = asmLines[lineIndex++].Trim(' ');
+                            Console.WriteLine("Now Processing : "+line);
                             if (line.Contains("?Release")) continue;
                             if (line.StartsWith("dq offset ??"))
                             {
@@ -382,6 +443,11 @@ namespace OleViewDotNet.Forms
                             }
                             else if (line.StartsWith("dq offset ?"))
                             {
+                                if (startIndex<firstProcNum)
+                                {
+                                    startIndex++;
+                                    continue;
+                                }
                                 if (idlIndex == methodsFromIdl.Count)
                                 {
                                     flag = true;
@@ -400,9 +466,9 @@ namespace OleViewDotNet.Forms
 
                                 if (pCnt1 != pCnt2)
                                 {
-                                    Console.WriteLine($"----------------different! {pCnt1} {pCnt2}");
-                                    Console.WriteLine($"line : {line.Split(new String[] { " ; " }, StringSplitOptions.None)[1].Trim(' ')}");
-                                    Console.WriteLine($"methodsFromIdl : {methodsFromIdl[idlIndex].Trim(' ')}");
+                                    //Console.WriteLine($"----------------different! {pCnt1} {pCnt2}");
+                                    //Console.WriteLine($"line : {line.Split(new String[] { " ; " }, StringSplitOptions.None)[1].Trim(' ')}");
+                                    //Console.WriteLine($"methodsFromIdl : {methodsFromIdl[idlIndex].Trim(' ')}");
                                     if (methodsFromIdl.Count == 1)
                                     {
                                         flag = true;
@@ -418,7 +484,7 @@ namespace OleViewDotNet.Forms
                                     }
                                 }
                                 
-                                Console.WriteLine($"--------------same! {pCnt1} {pCnt2} {line}");
+                                //Console.WriteLine($"--------------same! {pCnt1} {pCnt2} {line}");
                                 String[] parts;
                                 String className="", methodName="";
                                 try
@@ -450,6 +516,7 @@ namespace OleViewDotNet.Forms
                         if (methods.Count - methodsFromIdl.Count - 3 > 1 || methods.Count - methodsFromIdl.Count - 3 < 0) flag = true;
                         if (methodsFromIdl.Count >= 4 && ((methods.Count - methodsFromIdl.Count - 3) >= 0 && (methods.Count - methodsFromIdl.Count - 3) <= 1)) flag = false;
                         if (methods.Count == 5 && methods[3].EndsWith("CreateInstance") && methods[4].EndsWith("LockServer")) flag = true;
+                        if (methods.Count >= 20 && ((methods.Count - methodsFromIdl.Count - 3) >= 0 && (methods.Count - methodsFromIdl.Count - 3) <= 5)) flag = true;
                         if (!flag)
                         {
                             ret.Add(methods);

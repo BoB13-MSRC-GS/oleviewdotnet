@@ -121,6 +121,7 @@ partial class MainForm
             this.menuProcessesOptionsParseRegisteredClasses = new System.Windows.Forms.MenuItem();
             this.menuProcessesOptionsParseActCtx = new System.Windows.Forms.MenuItem();
             /**/
+            this.menuResolveMethodDllFix = new System.Windows.Forms.MenuItem();
             this.menuResolveMethodNamesFromIDAHard = new System.Windows.Forms.MenuItem();
             this.menuResolveMethodNamesFromIDA = new System.Windows.Forms.MenuItem();
             this.menuGetSequence = new System.Windows.Forms.MenuItem();
@@ -673,6 +674,7 @@ partial class MainForm
             this.menuProcessesOptions/**/,
             this.menuResolveMethodNamesFromIDA,
             this.menuResolveMethodNamesFromIDAHard,
+            this.menuResolveMethodDllFix,
             this.menuGetSequence/**/});
             this.menuProcesses.Text = "&Processes";
             /**/
@@ -762,7 +764,11 @@ partial class MainForm
             this.menuResolveMethodNamesFromIDAHard.Text = "Resolve Method Name by IDA (HARD)";
             this.menuResolveMethodNamesFromIDAHard.Click += new System.EventHandler(this.menuResolveMethodNamesFromIDAHard_Click);
 
-            this.menuGetSequence.Index = 6;
+            this.menuResolveMethodDllFix.Index = 6;
+            this.menuResolveMethodDllFix.Text = "Resolve Method Name by IDA (Fix Mode)";
+            this.menuResolveMethodDllFix.Click += new System.EventHandler(this.menuResolveMethodDllFix_Click);
+
+            this.menuGetSequence.Index = 7;
             this.menuGetSequence.Text = "Get Call Sequence";
             this.menuGetSequence.Click += new System.EventHandler(this.menuGetSequence_Click);
 
@@ -957,6 +963,7 @@ partial class MainForm
     /**/
     private System.Windows.Forms.MenuItem menuResolveMethodNamesFromIDA;
     private System.Windows.Forms.MenuItem menuResolveMethodNamesFromIDAHard;
+    private System.Windows.Forms.MenuItem menuResolveMethodDllFix;
     private System.Windows.Forms.MenuItem menuGetSequence;
     /**/
     private System.Windows.Forms.MenuItem menuViewRuntimeInterfaces;

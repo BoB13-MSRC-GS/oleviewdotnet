@@ -122,21 +122,22 @@ internal partial class SourceCodeViewerControl : UserControl
             builder.ToString().StartsWith("ERROR:") ||
             builder.ToString().Split('\n')[0].StartsWith("struct") || builder.ToString().Split('\n')[1].StartsWith("struct") ||
             builder.ToString().Split('\n')[0].StartsWith("union") || builder.ToString().Split('\n')[1].StartsWith("union") ||
-            builder.ToString().Split('\n')[0].StartsWith("[switch_type") || builder.ToString().Split('\n')[1].StartsWith("[switch_type")
+            builder.ToString().Split('\n')[0].StartsWith("[switch_type") || builder.ToString().Split('\n')[1].StartsWith("[switch_type") ||
+            builder.ToString().Split('\n')[0].Contains("needs to be parsed")
             )
         {
             SetText(builder.ToString());
             return builder.ToString();
         }
 
-        if (!builder.ToString().Contains("IUnknown {"))
-        {
-            String result = "// Inheritanced class is not supported yet.\n"+builder.ToString();
-            SetText(result);
-            return result;
-        }
+        //if (!builder.ToString().Contains("IUnknown {"))
+        //{
+        //    String result = "// Inheritanced class is not supported yet.\n"+builder.ToString();
+        //    SetText(result);
+        //    return result;
+        //}
 
-        //AllocConsole();
+        AllocConsole();
         if (!m_isReally ||
             (!ProgramSettings.ResolveMethodNamesFromIDA && !ProgramSettings.ResolveMethodNamesFromIDAHard) ||
             builder.ToString().Contains("oleautomation") || 
@@ -146,15 +147,23 @@ internal partial class SourceCodeViewerControl : UserControl
             return builder.ToString();
         }
         if (!Directory.Exists("interfaces\\idls")) Directory.CreateDirectory("interfaces\\idls");
+
         String fileName = "interfaces\\idls\\";
         String resultIDL = "";
         String serviceName = GetServiceName();
         String binaryPath = null;
-        if (serviceName != null) binaryPath = ResolveMethod.GetBinaryPath(serviceName);
+        if (ProgramSettings.ResolveMethodDllFix)
+        {
+            binaryPath = ProgramSettings.FixedDll;
+        }
         else
         {
-            SetText(builder.ToString());
-            return builder.ToString();
+            if (serviceName != null) binaryPath = ResolveMethod.GetBinaryPath(serviceName);
+            else
+            {
+                SetText(builder.ToString());
+                return builder.ToString();
+            }
         }
 
         m_success = true;
@@ -389,18 +398,18 @@ internal partial class SourceCodeViewerControl : UserControl
         List<List<String>> methods = ResolveMethod.GetMethodsFromIDA(binaryPath, idl);
         String resultIDL = "";
 
-        if (methods.Count == 0)
-        {
-            Console.WriteLine("GetMethodsFromIDA() Failed. Get Candidates...");
-            methods = ResolveMethod.GetMethodsFromCandidates(binaryPath, idl);
-        }
+        //if (methods.Count == 0)
+        //{
+        //    Console.WriteLine("GetMethodsFromIDA() Failed. Get Candidates...");
+        List<List<String>> methods2 = ResolveMethod.GetMethodsFromCandidates(binaryPath, idl);
+        //}
         if (!ProgramSettings.ResolveMethodNamesFromIDAHard && showPopup)
         {
             label.Text = "Resolving Methods...";
             label.Update();
             popup.Close();
         }
-
+        foreach (List<String> method in methods2) methods.Add(method);
         return methods;
 
         for (int i = 0; i < methods.Count; i++)
@@ -530,30 +539,34 @@ internal partial class SourceCodeViewerControl : UserControl
 
     internal int GetServicePid(String serviceName)
     {
-        try
-        {
-            ServiceController service = new ServiceController(serviceName);
 
-            if (service.Status == ServiceControllerStatus.Stopped)
-            {
-                service.Start();
-                service.WaitForStatus(ServiceControllerStatus.Running);
-            }
-        }
-        catch (InvalidOperationException ex)
-        {
-            return -1;
-        }
-        catch (Exception ex)
-        {
-            return -1;
-        }
-
-        string query = $"SELECT ProcessId FROM Win32_Service WHERE Name = '{serviceName}'";
+        string query = $"SELECT Name,ProcessId FROM Win32_Service WHERE Name LIKE '{serviceName}%'";
         using (var searcher = new System.Management.ManagementObjectSearcher(query))
         {
             foreach (var obj in searcher.Get())
             {
+                try
+                {
+                    ServiceController service = new ServiceController((String)obj["Name"]);
+
+                    if (service.Status == ServiceControllerStatus.Stopped)
+                    {
+                        service.Start();
+                        service.WaitForStatus(ServiceControllerStatus.Running);
+                    }
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Console.WriteLine("GetServicePid(): " + ex.Message);
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("GetServicePid(): " + ex.Message);
+                    continue;
+                }
+                if (searcher.Get().Count == 1) return Convert.ToInt32(obj["ProcessId"]);
+                if ((String)(obj["Name"]) == serviceName) continue;
                 return Convert.ToInt32(obj["ProcessId"]);
             }
         }

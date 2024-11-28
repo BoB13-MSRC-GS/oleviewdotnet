@@ -1117,7 +1117,7 @@ internal partial class COMRegistryViewer : UserControl
             String classGuid = "{" + clsid.Clsid.ToString() + "}";
             Process process = new Process();
             process.StartInfo.FileName = "test.exe";
-            process.StartInfo.Arguments = $"{classGuid}";
+            process.StartInfo.Arguments = $"0 {classGuid}";
             process.StartInfo.CreateNoWindow = true;
             //process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
 
@@ -1133,6 +1133,7 @@ internal partial class COMRegistryViewer : UserControl
             }
             popup.Close();
             process.Dispose();
+            if (!File.Exists("now.list")) return;
             using (StreamReader reader = new StreamReader("now.list"))
             {
                 string line;

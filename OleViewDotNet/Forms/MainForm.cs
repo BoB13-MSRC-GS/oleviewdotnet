@@ -1110,6 +1110,8 @@ internal partial class MainForm : Form
 
     private void menuResolveMethodNamesFromIDAHard_Click(object sender, EventArgs e)
     {
+        if (ProgramSettings.ResolveMethodDllFix)
+            ProgramSettings.ResolveMethodDllFix = !ProgramSettings.ResolveMethodDllFix;
         ProgramSettings.ResolveMethodNamesFromIDAHard = !ProgramSettings.ResolveMethodNamesFromIDAHard;
     }
 
@@ -1120,12 +1122,24 @@ internal partial class MainForm : Form
         callSequenceForm.Show();
     }
 
+    private void menuResolveMethodDllFix_Click(object sender, EventArgs e) {
+        if (ProgramSettings.ResolveMethodNamesFromIDAHard) 
+            ProgramSettings.ResolveMethodNamesFromIDAHard = !ProgramSettings.ResolveMethodNamesFromIDAHard;
+        ProgramSettings.ResolveMethodDllFix = !ProgramSettings.ResolveMethodDllFix;
+        if (ProgramSettings.ResolveMethodDllFix)
+        {
+            DllFixForm dllFixForm = new DllFixForm();
+            dllFixForm.ShowDialog();
+        }
+    }
+
     /**/
 
     private void menuProcesses_Popup(object sender, EventArgs e)
     {
         menuResolveMethodNamesFromIDA.Checked = ProgramSettings.ResolveMethodNamesFromIDA;
         menuResolveMethodNamesFromIDAHard.Checked = ProgramSettings.ResolveMethodNamesFromIDAHard;
+        menuResolveMethodDllFix.Checked = ProgramSettings.ResolveMethodDllFix;
     }
 
     private void menuProcessesOptions_Popup(object sender, EventArgs e)

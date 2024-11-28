@@ -72,7 +72,15 @@ namespace OleViewDotNet.Forms
                                 Console.Write("Now Processing : ");
                                 foreach (String p in param) Console.Write(p + " ");
                                 Console.WriteLine();
-                                if (param[0].Contains("out") && param[param.Length - 2].StartsWith("I"))
+                                if (param[0].Contains("out") && !param[param.Length - 2].StartsWith("int") &&
+                                    !param[param.Length-2].StartsWith("HSTRING") && !param[param.Length - 2].StartsWith("wchar") &&
+                                    !param[param.Length-2].StartsWith("GUID") && !param[param.Length - 2].StartsWith("byte") &&
+                                    !param[param.Length - 2].StartsWith("__int") && !param[param.Length - 2].StartsWith("uint") &&
+                                    !param[param.Length - 2].StartsWith("Struct") && !param[param.Length - 2].ToLower().StartsWith("handle") &&
+                                    !param[param.Length - 2].StartsWith("float") && !param[param.Length - 2].StartsWith("double") &&
+                                    !param[param.Length - 2].StartsWith("char") && !param[param.Length - 2].StartsWith("HWND") &&
+                                    !param[param.Length - 2].StartsWith("handle") && !param[param.Length - 2].StartsWith("BSTR") &&
+                                    !param[param.Length - 2].StartsWith("short") && !param[param.Length - 2].StartsWith("VARIANT"))
                                 {
                                     Console.WriteLine($"Gotcha : {interfaceName} -> {param[param.Length - 2]}");
                                     param[param.Length - 2] = param[param.Length - 2].Replace("*", "");
