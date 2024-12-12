@@ -1,15 +1,70 @@
-# oleviewdotnet
 
-OleView .NET은 RpcView와 다르게 심볼을 로드하는 기능이 없어 IDL에 메소드명이 `Proc{n}`으로 뜨는 문제점이 있습니다. 이 레포지토리는 해당 부분을 최대한 개선한 버전입니다.
+
+<div align='center'>
+  <h1><code>oleviewdotnet (BoB13-MSRC_GASAN)</code></h1>
+  <p>
+    <strong>Enhanced oleviewdotnet</strong><br>
+    show more interfaces, resolve IDL method name, provide class object call sequence
+  </p>
+  <p>
+    Derived from oleviewdotnet of tyranid(James Forshaw)
+  </p>
+  <p>
+    <img src='add please'/>
+  </p>
+</div>
+
+## Overview
+The existing oleviewdotnet has a problem where the method name appears as `Proc{n}` in the IDL because the symbol loading function does not work.
+
+Also, there is a problem where the corresponding interface is not output for certain classes.
+
+This repository has improved this part and added convenient features such as providing class object call sequence.
+
+---
+
+## Improvements
+### Solve the problem of interface not being extracted
+<p align='center'>
+<img src='pics/interface.webp'>
+</p>
+
+- For classes that are empty because the interface is not extracted or that only output IUnknown, **the interface is identified and extracted.**
+- It iterates through the IIDs registered in the registry for the CLSID of the class to be extracted and performs CoCreateInstance. If successful, it is judged to be correct and the interface is extracted through the IID.
 
 ### IDL Method Name Resolve
-- **해당 기능을 사용하려면 Processes 탭의 "Resolve Method Name by IDA"를 활성화해야 합니다.**
+<p align='center'>
+<img src='pics/idlresolve.webp'>
+</p>
 
-- IDL 최상단에 해당 바이너리의 경로가 표시됩니다.
-- IDL에 `// Candidate {n}`이 표시되는 경우에는 메소드 개수와 인자 개수를 비교하여 추측된 것이므로 정확하지 않을 수 있습니다.
-- View Proxy Library 기능을 사용하는 경우에도 어느정도 메소드명을 추출해주지만, 여러 서비스가 공유하는 Proxy DLL의 경우에는 제대로 추출되지 않을 수 있습니다.
-- 메소드명을 추출하기 위해 IDA를 사용하므로, 레지스트리에 IDA 경로 등록을 위해 한 번이라도 ida64.exe를 실행한 적이 있어야 합니다.
-- **최초 1회 DLL 복사 및 idat64.exe를 이용한 분석 과정에서 약간의 시간이 소요될 수 있습니다.**
+- **To use this feature, you need to enable "Resolve Method Name by IDA" in the Processes tab.**
+- This feature is implemented leveraging the IDA decompile engine.
+- The path to the binary is displayed at the top of the IDL.
+- If you see `// Candidate {n}` in your IDL, it may not be accurate because it is a guess based on the number of methods and the number of arguments.
+- Since we use IDA to extract method names, you must have run ida64.exe at least once to register the IDA path in the registry.
+- **The first time DLL copy and analysis process using idat64.exe may take some time.**
+### IDL Method Name Resolve (HARD)
+- **It decompiles all dlls loaded into the process.**
+- Even if the interface belongs to example.dll but is actually implemented in example_core.dll or example_impl.dll, etc. and loaded into the process and operated, method name resolution is possible.
+### IDL Method Name Resolve (Fix mode)
+- You can perform method name resolution quickly **by specifying a dll**, rather than decompiling all dlls every time.
 
-### 클래스 클릭 시 인터페이스 미추출 문제 해결
-- 클래스를 클릭하였을 때 인터페이스가 추출되지 않는 경우가 있어, 이를 CoCreateInstance 함수를 이용해 추출해줍니다.
+---
+
+## Additional features
+### Class object Call Sequence
+<p align='center'>
+<img src='pics/callsequence.webp'>
+</p>
+
+- **Lists all sequence of other class objects that can be obtained from an exposed COM class.**
+- You can obtain various class objects from exposed COM classes, such as IWallet->IWalletItemManager->IWalletItemList->IWalletItem, and understanding them is deep and complex.
+- Easily identify the scope of class objects that can be accessed and analyzed from a vulnerability research perspective.
+
+---
+
+## Achievement
+- We can extract more 91 methods.
+- We can automatically find the vtable of an interface and resolve IDL method names with high accuracy.
+- We can easily determine the target scope of the COM class
+- As a result, a dramatic reduction in the initial analysis time for vulnerability analysis is possible.
