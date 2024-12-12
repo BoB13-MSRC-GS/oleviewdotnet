@@ -59,8 +59,7 @@ This repository has improved this part and added convenient features such as pro
 
 - **Lists all sequence of other class objects that can be obtained from an exposed COM class.**
 - You can obtain various class objects from exposed COM classes, such as IWallet->IWalletItemManager->IWalletItemList->IWalletItem, and understanding them is deep and complex.
-- Easily identify the scope of class objects that can be accessed and analyzed from a vulnerability research perspective.
-
+- From a vulnerability research perspective, it easily identifies the scope of class objects that can be accessed and analyzed.
 ---
 
 ## Achievement
