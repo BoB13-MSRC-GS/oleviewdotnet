@@ -117,6 +117,14 @@ namespace NtApiDotNet.Win32.Rpc
             throw new RpcTransportException("RPC transport doesn't support asynchronous pipes.");
         }
 
+        /// <summary>
+        /// Get the NDR transport marshaler if supported.
+        /// </summary>
+        /// <returns>The NDR transport marshaler. Returns null if not supported or not connected.</returns>
+        protected INdrTransportMarshaler GetMarshaler()
+        {
+            return _transport as INdrTransportMarshaler;
+        }
         #endregion
 
         #region Public Properties
@@ -314,7 +322,21 @@ namespace NtApiDotNet.Win32.Rpc
         /// <remarks>The ALPC endpoint will be looked up in the endpoint mapper.</remarks>
         public void Connect()
         {
-            Connect(null);
+            Connect(string.Empty, null);
+        }
+
+        /// <summary>
+        /// Connect directly to a transport.
+        /// </summary>
+        /// <param name="transport">The client transport.</param>
+        /// <remarks>The transport must already be pre-bound.</remarks>
+        public void Connect(IRpcClientTransport transport)
+        {
+            if (Connected)
+            {
+                Disconnect();
+            }
+            _transport = transport;
         }
 
         /// <summary>

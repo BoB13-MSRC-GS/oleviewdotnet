@@ -14,10 +14,12 @@
 //    You should have received a copy of the GNU General Public License
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
+using NtApiDotNet.Win32.Rpc;
 using OleViewDotNet.Database;
 using OleViewDotNet.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Windows.Forms;
 
@@ -29,10 +31,19 @@ namespace OleViewDotNet.Forms;
 internal partial class TypedObjectViewer : UserControl
 {
     private readonly string m_objName;
-    private readonly ObjectEntry m_pEntry;
     private readonly object m_pObject;
     private readonly Type m_dispType;
     private readonly COMRegistry m_registry;
+
+    private bool IncludeMember(MemberInfo member)
+    {
+        if (m_dispType.IsInterface)
+        {
+            return true;
+        }
+
+        return member.DeclaringType.BaseType == typeof(RpcClientBase);
+    }
 
     /// <summary>
     /// Constructor
@@ -42,10 +53,9 @@ internal partial class TypedObjectViewer : UserControl
     /// <param name="dispType">Reflected type</param>
     public TypedObjectViewer(COMRegistry registry, string strObjName, ObjectEntry pEntry, Type dispType)
     {
-        m_pEntry = pEntry;
         m_pObject = pEntry.Instance;
         m_objName = strObjName;
-        m_dispType = dispType;
+        m_dispType = dispType.IsByRef ? dispType.GetElementType() : dispType;
         m_registry = registry;
         InitializeComponent();
 
@@ -55,6 +65,11 @@ internal partial class TypedObjectViewer : UserControl
 
     public TypedObjectViewer(COMRegistry registry, string strObjName, object pObject, Type dispType)
         : this(registry, strObjName, new ObjectEntry(registry, strObjName, pObject), dispType)
+    {
+    }
+
+    public TypedObjectViewer(COMRegistry registry, string strObjName, Type dispType)
+        : this(registry, strObjName, new ObjectEntry(strObjName, null, Array.Empty<COMInterfaceEntry>()), dispType)
     {
     }
 
@@ -69,8 +84,22 @@ internal partial class TypedObjectViewer : UserControl
         listViewProperties.Columns.Add("Writeable");
 
         lblName.Text = m_dispType.Name;
-        MemberInfo[] members = m_dispType.GetMembers();
-        foreach (MemberInfo info in members)
+        BindingFlags flags;
+        if (m_pObject is null)
+        {
+            flags = BindingFlags.Static | BindingFlags.Public;
+        }
+        else
+        {
+            flags = BindingFlags.Instance | BindingFlags.Public;
+        }
+
+        IEnumerable<MemberInfo> members = m_dispType.GetMembers(flags);
+        if (m_pObject is null)
+        {
+            members = members.Concat(m_dispType.GetConstructors());
+        }
+        foreach (MemberInfo info in members.Where(IncludeMember))
         {
             if (info.MemberType == MemberTypes.Method)
             {
@@ -122,6 +151,7 @@ internal partial class TypedObjectViewer : UserControl
             else if (info.MemberType == MemberTypes.Property)
             {
                 PropertyInfo pi = (PropertyInfo)info;
+
                 ListViewItem item = listViewProperties.Items.Add(pi.Name);
                 item.Tag = pi;
                 item.SubItems.Add(pi.PropertyType.ToString());
@@ -151,6 +181,49 @@ internal partial class TypedObjectViewer : UserControl
 
                 item.SubItems.Add(pi.CanWrite.ToString());
             }
+            else if (m_pObject is null && info.MemberType == MemberTypes.Constructor)
+            {
+                ConstructorInfo ci = (ConstructorInfo)info;
+                ListViewItem item = listViewMethods.Items.Add(ci.Name);
+                item.Tag = ci;
+                List<string> pars = new();
+                item.SubItems.Add(info.DeclaringType.ToString());
+                ParameterInfo[] pis = ci.GetParameters();
+
+                foreach (ParameterInfo pi in pis)
+                {
+                    string strDir = "";
+
+                    if (pi.IsIn)
+                    {
+                        strDir += "in";
+                    }
+
+                    if (pi.IsOut)
+                    {
+                        strDir += "out";
+                    }
+
+                    if (strDir.Length == 0)
+                    {
+                        strDir = "in";
+                    }
+
+                    if (pi.IsRetval)
+                    {
+                        strDir += " retval";
+                    }
+
+                    if (pi.IsOptional)
+                    {
+                        strDir += " optional";
+                    }
+
+                    pars.Add($"[{strDir}] {pi.ParameterType.Name} {pi.Name}");
+                }
+
+                item.SubItems.Add(string.Join(", ", pars));
+            }
         }
 
         listViewMethods.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
@@ -159,9 +232,7 @@ internal partial class TypedObjectViewer : UserControl
         listViewProperties.AutoResizeColumns(ColumnHeaderAutoResizeStyle.HeaderSize);
 
         listViewMethods.ListViewItemSorter = new ListItemComparer(0);
-        listViewMethods.Sort();
         listViewProperties.ListViewItemSorter = new ListItemComparer(0);
-        listViewProperties.Sort();
     }
 
     private void UpdateProperties()
@@ -184,14 +255,7 @@ internal partial class TypedObjectViewer : UserControl
                 val = null;
             }
 
-            if (val is not null)
-            {
-                item.SubItems[2].Text = val.ToString();
-            }
-            else
-            {
-                item.SubItems[2].Text = "<null>";
-            }
+            item.SubItems[2].Text = FormUtils.FormatObject(val, false);
         }
         listViewProperties.AutoResizeColumns(ColumnHeaderAutoResizeStyle.ColumnContent);
         listViewProperties.AutoResizeColumns(ColumnHeaderAutoResizeStyle.HeaderSize);
@@ -247,7 +311,7 @@ internal partial class TypedObjectViewer : UserControl
     {
         if (listViewMethods.SelectedItems.Count > 0)
         {
-            using (InvokeForm frm = new(m_registry, (MethodInfo)listViewMethods.SelectedItems[0].Tag, m_pObject, m_objName))
+            using (InvokeForm frm = new(m_registry, (MethodBase)listViewMethods.SelectedItems[0].Tag, m_pObject, m_objName))
             {
                 frm.ShowDialog();
             }

@@ -81,7 +81,7 @@ internal partial class HexEditorControl : UserControl
             }
             catch (IOException ex)
             {
-                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                EntryPoint.ShowError(this, ex);
             }
         }
     }
@@ -99,7 +99,7 @@ internal partial class HexEditorControl : UserControl
             }
             catch (IOException ex)
             {
-                MessageBox.Show(ex.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                EntryPoint.ShowError(this, ex);
             }
         }
     }
@@ -127,7 +127,7 @@ internal partial class HexEditorControl : UserControl
             hexBox.PasteHex();
         }
     }
-    
+
     private void contextMenuStrip_Opening(object sender, System.ComponentModel.CancelEventArgs e)
     {
         pasteToolStripMenuItem.Enabled = hexBox.CanPaste();
@@ -156,7 +156,7 @@ internal partial class HexEditorControl : UserControl
 
     private byte[] GetSelectedBytes()
     {
-        byte[] result = new byte[hexBox.SelectionLength]; 
+        byte[] result = new byte[hexBox.SelectionLength];
         for (int i = 0; i < result.Length; ++i)
         {
             result[i] = _bytes.ReadByte(hexBox.SelectionStart + i);

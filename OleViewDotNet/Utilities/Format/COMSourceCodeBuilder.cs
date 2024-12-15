@@ -20,40 +20,28 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 
 namespace OleViewDotNet.Utilities.Format;
 
-public sealed class COMSourceCodeBuilder
+public sealed class COMSourceCodeBuilder : NdrStringBuilder
 {
     #region Private Members
-    private readonly Stack<string> m_indent = new();
-    private readonly StringBuilder m_builder = new();
     private readonly COMRegistry m_registry;
     private Tuple<COMSourceCodeBuilderType, bool> m_current_ndr_config = default;
     private INdrFormatter m_formatter;
 
-    private class StackPopper : IDisposable
+    private struct StackPopper : IDisposable
     {
-        private readonly Stack<string> _indent;
+        private readonly COMSourceCodeBuilder _builder;
 
-        public StackPopper(Stack<string> indent, int count)
+        public StackPopper(COMSourceCodeBuilder builder)
         {
-            _indent = indent;
-            _indent.Push(new string(' ', count));
+            _builder = builder;
         }
 
         void IDisposable.Dispose()
         {
-            _indent.Pop();
-        }
-    }
-
-    private void AddIndent()
-    {
-        foreach (var s in m_indent)
-        {
-            m_builder.Append(s);
+            _builder.PopIndent();
         }
     }
     #endregion
@@ -91,28 +79,12 @@ public sealed class COMSourceCodeBuilder
 
         m_formatter = OutputType switch
         {
-            COMSourceCodeBuilderType.Idl => IdlNdrFormatter.Create(m_registry?.IidNameCache, s => COMUtilities.DemangleWinRTName(s), flags),
-            COMSourceCodeBuilderType.Generic => DefaultNdrFormatter.Create(m_registry?.IidNameCache, s => COMUtilities.DemangleWinRTName(s), flags),
-            COMSourceCodeBuilderType.Cpp => CppNdrFormatter.Create(m_registry?.IidNameCache, s => COMUtilities.DemangleWinRTName(s), flags),
+            COMSourceCodeBuilderType.Idl => IdlNdrFormatter.Create(m_registry?.IidNameCache, s => WinRTNameUtils.DemangleName(s), flags),
+            COMSourceCodeBuilderType.Generic => DefaultNdrFormatter.Create(m_registry?.IidNameCache, s => WinRTNameUtils.DemangleName(s), flags),
+            COMSourceCodeBuilderType.Cpp => CppNdrFormatter.Create(m_registry?.IidNameCache, s => WinRTNameUtils.DemangleName(s), flags),
             _ => throw new ArgumentException("Invalid output type."),
         };
         return m_formatter;
-    }
-
-    internal IDisposable PushIndent(int count)
-    {
-        return new StackPopper(m_indent, count);
-    }
-
-    internal void AppendLine(string line)
-    {
-        AddIndent();
-        m_builder.AppendLine(line);
-    }
-
-    internal void AppendLine()
-    {
-        m_builder.AppendLine();
     }
 
     internal void AppendList(IEnumerable<string> lines)
@@ -144,7 +116,7 @@ public sealed class COMSourceCodeBuilder
         foreach (var obj in list)
         {
             obj.Format(this);
-            m_builder.AppendLine();
+            AppendLine();
         }
     }
 
@@ -157,7 +129,7 @@ public sealed class COMSourceCodeBuilder
                 formattable = new SourceCodeFormattableType(type);
             }
             formattable.Format(this);
-            m_builder.AppendLine();
+            AppendLine();
         }
     }
 
@@ -170,6 +142,12 @@ public sealed class COMSourceCodeBuilder
     #endregion
 
     #region Public Methods
+    public IDisposable PushIndent(int count)
+    {
+        PushIndent(' ', count);
+        return new StackPopper(this);
+    }
+
     public void AppendObject(object obj, bool parse = false)
     {
         if (obj is null)
@@ -201,21 +179,11 @@ public sealed class COMSourceCodeBuilder
             {
                 throw new ArgumentException($"Object {obj} must be parsed before formatting.");
             }
+
             parsable.ParseSourceCode();
         }
 
         formattable.Format(this);
-    }
-
-    public void Reset()
-    {
-        m_builder.Clear();
-        m_indent.Clear();
-    }
-
-    public override string ToString()
-    {
-        return m_builder.ToString();
     }
     #endregion
 }

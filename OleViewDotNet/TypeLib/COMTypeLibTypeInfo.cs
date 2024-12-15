@@ -16,10 +16,10 @@
 
 using OleViewDotNet.Database;
 using OleViewDotNet.TypeLib.Instance;
-using OleViewDotNet.TypeLib.Parser;
 using OleViewDotNet.Utilities.Format;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices.ComTypes;
 
 namespace OleViewDotNet.TypeLib;
@@ -34,7 +34,7 @@ public class COMTypeLibTypeInfo : ICOMGuid, ICOMSourceCodeFormattable
     private readonly TYPEATTR _attr;
     private bool _parsed;
 
-    private protected virtual void OnParse(COMTypeLibParser.TypeInfo type_info, TYPEATTR attr)
+    private protected virtual void OnParse(COMTypeLibTypeInfoParser type_info, TYPEATTR attr)
     {
     }
 
@@ -71,18 +71,21 @@ public class COMTypeLibTypeInfo : ICOMGuid, ICOMSourceCodeFormattable
         if (HasTypeFlag(TYPEFLAGS.TYPEFLAG_FPROXY))
             attrs.Add("proxy");
 
+        attrs.AddRange(CustomData.Select(d => d.FormatAttribute()));
+
         return attrs;
     }
     #endregion
 
     #region Internal Members
-    internal COMTypeLibTypeInfo(COMTypeDocumentation doc, TYPEATTR attr)
+    internal COMTypeLibTypeInfo(COMTypeDocumentation doc, TYPEATTR attr, IEnumerable<COMTypeCustomDataItem> custom_data)
     {
         _doc = doc;
         _attr = attr;
+        CustomData = custom_data.ToList().AsReadOnly();
     }
 
-    internal void Parse(COMTypeLibParser.TypeInfo type_info)
+    internal void Parse(COMTypeLibTypeInfoParser type_info)
     {
         if (_parsed)
         {
@@ -113,6 +116,7 @@ public class COMTypeLibTypeInfo : ICOMGuid, ICOMSourceCodeFormattable
     public TYPEKIND Kind => _attr.typekind;
     public TYPEFLAGS Flags => _attr.wTypeFlags;
     public COMTypeLibReference TypeLib { get; internal set; }
+    public IReadOnlyList<COMTypeCustomDataItem> CustomData { get; }
     Guid ICOMGuid.ComGuid => Uuid;
     bool ICOMSourceCodeFormattable.IsFormattable => true;
     #endregion

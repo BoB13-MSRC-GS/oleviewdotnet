@@ -15,7 +15,6 @@
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
 using OleViewDotNet.Database;
-using OleViewDotNet.Utilities;
 using System;
 using System.Linq;
 using System.Windows.Forms;
@@ -48,7 +47,7 @@ internal partial class DiffRegistryForm : Form
         {
             try
             {
-                COMRegistry registry = COMUtilities.LoadRegistry(this, dlg.FileName);
+                COMRegistry registry = FormUtils.LoadRegistry(this, dlg.FileName);
                 comboBox.Items.Add(registry);
                 comboBox.SelectedItem = registry;
             }
@@ -57,7 +56,7 @@ internal partial class DiffRegistryForm : Form
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                EntryPoint.ShowError(this, ex);
             }
         }
     }
@@ -92,7 +91,7 @@ internal partial class DiffRegistryForm : Form
         {
             try
             {
-                DiffRegistry = COMUtilities.DiffRegistry(this, left, right, GetDiffMode());
+                DiffRegistry = FormUtils.DiffRegistry(this, left, right, GetDiffMode());
                 DialogResult = DialogResult.OK;
                 Close();
             }
@@ -101,7 +100,7 @@ internal partial class DiffRegistryForm : Form
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                EntryPoint.ShowError(this, ex);
             }
         }
     }

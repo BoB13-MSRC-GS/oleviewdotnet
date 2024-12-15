@@ -16,7 +16,6 @@
 
 using OleViewDotNet.Proxy;
 using OleViewDotNet.TypeLib.Instance;
-using OleViewDotNet.TypeLib.Parser;
 using System.Collections.Generic;
 using System.Runtime.InteropServices.ComTypes;
 
@@ -25,7 +24,7 @@ namespace OleViewDotNet.TypeLib;
 public abstract class COMTypeLibInterfaceBase : COMTypeLibTypeInfo
 {
     #region Private Members
-    private protected override void OnParse(COMTypeLibParser.TypeInfo type_info, TYPEATTR attr)
+    private protected override void OnParse(COMTypeLibTypeInfoParser type_info, TYPEATTR attr)
     {
         List<COMTypeLibMethod> methods = new();
         for (int i = 0; i < attr.cFuncs; ++i)
@@ -48,8 +47,8 @@ public abstract class COMTypeLibInterfaceBase : COMTypeLibTypeInfo
     #endregion
 
     #region Internal Members
-    internal COMTypeLibInterfaceBase(COMTypeDocumentation doc, TYPEATTR attr)
-        : base(doc, attr)
+    internal COMTypeLibInterfaceBase(COMTypeDocumentation doc, TYPEATTR attr, IEnumerable<COMTypeCustomDataItem> custom_data)
+        : base(doc, attr, custom_data)
     {
     }
     #endregion

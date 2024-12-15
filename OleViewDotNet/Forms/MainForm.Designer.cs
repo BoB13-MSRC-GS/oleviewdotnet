@@ -54,6 +54,7 @@ partial class MainForm
             this.menuItem8 = new System.Windows.Forms.MenuItem();
             this.menuFileOpenTypeLib = new System.Windows.Forms.MenuItem();
             this.menuFileOpenProxyDll = new System.Windows.Forms.MenuItem();
+            this.menuFileImportInteropAssembly = new System.Windows.Forms.MenuItem();
             this.menuItem12 = new System.Windows.Forms.MenuItem();
             this.menuFileSettings = new System.Windows.Forms.MenuItem();
             this.menuItem2 = new System.Windows.Forms.MenuItem();
@@ -77,9 +78,6 @@ partial class MainForm
             this.menuRegistryAppIDsIL = new System.Windows.Forms.MenuItem();
             this.menuRegistryAppIDsWithAC = new System.Windows.Forms.MenuItem();
             this.menuViewLocalServices = new System.Windows.Forms.MenuItem();
-            /* KWAKMU18 ADDED 20240907 - Add New Menu */
-            this.menuViewLocalServices2 = new System.Windows.Forms.MenuItem();
-            /* KWAKMU18 ADDED 20240907 - Add New Menu */
             this.menuItem1 = new System.Windows.Forms.MenuItem();
             this.menuViewInterfaces = new System.Windows.Forms.MenuItem();
             this.menuViewInterfacesByName = new System.Windows.Forms.MenuItem();
@@ -120,13 +118,15 @@ partial class MainForm
             this.menuProcessesOptionsParseStubs = new System.Windows.Forms.MenuItem();
             this.menuProcessesOptionsParseRegisteredClasses = new System.Windows.Forms.MenuItem();
             this.menuProcessesOptionsParseActCtx = new System.Windows.Forms.MenuItem();
-            /**/
+
+            /* Added */
             this.menuResolveMethodDllFix = new System.Windows.Forms.MenuItem();
             this.menuResolveMethodNamesFromIDAHard = new System.Windows.Forms.MenuItem();
             this.menuResolveMethodNamesFromIDA = new System.Windows.Forms.MenuItem();
             this.menuGetSequence = new System.Windows.Forms.MenuItem();
-            /**/
-            this.menuItemStorage = new System.Windows.Forms.MenuItem();
+            /* Added */
+
+        this.menuItemStorage = new System.Windows.Forms.MenuItem();
             this.menuStorageNewStorage = new System.Windows.Forms.MenuItem();
             this.menuStorageOpenStorage = new System.Windows.Forms.MenuItem();
             this.menuItemView = new System.Windows.Forms.MenuItem();
@@ -134,6 +134,7 @@ partial class MainForm
             this.menuViewRegistryViewOptions = new System.Windows.Forms.MenuItem();
             this.menuViewAlwaysShowSourceCode = new System.Windows.Forms.MenuItem();
             this.menuViewEnableAutoParsing = new System.Windows.Forms.MenuItem();
+            this.menuViewSaveProxyNamesOnExit = new System.Windows.Forms.MenuItem();
             this.menuHelp = new System.Windows.Forms.MenuItem();
             this.menuHelpAbout = new System.Windows.Forms.MenuItem();
             this.SuspendLayout();
@@ -176,6 +177,7 @@ partial class MainForm
             this.menuItem8,
             this.menuFileOpenTypeLib,
             this.menuFileOpenProxyDll,
+            this.menuFileImportInteropAssembly,
             this.menuItem12,
             this.menuFileSettings,
             this.menuItem2,
@@ -313,25 +315,31 @@ partial class MainForm
             this.menuFileOpenProxyDll.Text = "Open Proxy D&LL";
             this.menuFileOpenProxyDll.Click += new System.EventHandler(this.menuFileOpenProxyDll_Click);
             // 
+            // menuFileImportInteropAssembly
+            // 
+            this.menuFileImportInteropAssembly.Index = 22;
+            this.menuFileImportInteropAssembly.Text = "Import Interop Assembly";
+            this.menuFileImportInteropAssembly.Click += new System.EventHandler(this.menuFileImportInteropAssembly_Click);
+            // 
             // menuItem12
             // 
-            this.menuItem12.Index = 22;
+            this.menuItem12.Index = 23;
             this.menuItem12.Text = "-";
             // 
             // menuFileSettings
             // 
-            this.menuFileSettings.Index = 23;
+            this.menuFileSettings.Index = 24;
             this.menuFileSettings.Text = "Settin&gs";
             this.menuFileSettings.Click += new System.EventHandler(this.menuFileSettings_Click);
             // 
             // menuItem2
             // 
-            this.menuItem2.Index = 24;
+            this.menuItem2.Index = 25;
             this.menuItem2.Text = "-";
             // 
             // menuFileExit
             // 
-            this.menuFileExit.Index = 25;
+            this.menuFileExit.Index = 26;
             this.menuFileExit.Shortcut = System.Windows.Forms.Shortcut.AltF4;
             this.menuFileExit.Text = "E&xit";
             this.menuFileExit.Click += new System.EventHandler(this.menuFileExit_Click);
@@ -358,9 +366,6 @@ partial class MainForm
             this.menuRegistryAppIDsIL,
             this.menuRegistryAppIDsWithAC,
             this.menuViewLocalServices,
-            /* KWAKMU18 ADDED 20240907 - Add New Menu */
-            this.menuViewLocalServices2,
-            /* KWAKMU18 ADDED 20240907 - Add New Menu */
             this.menuItem1,
             this.menuViewInterfaces,
             this.menuViewInterfacesByName,
@@ -478,12 +483,6 @@ partial class MainForm
             this.menuViewLocalServices.Text = "L&ocal Services";
             this.menuViewLocalServices.Click += new System.EventHandler(this.menuViewLocalServices_Click);
             // 
-            /* KWAKMU18 ADDED 20240907 - Add New Menu */
-            this.menuViewLocalServices2.Index = 27;
-            this.menuViewLocalServices2.Text = "Local Services (Low->High)";
-            this.menuViewLocalServices2.Click += new System.EventHandler(this.menuViewLocalServices_Click);
-            /* KWAKMU18 ADDED 20240907 - Add New Menu */
-            /**/
             // menuItem1
             // 
             this.menuItem1.Index = 18;
@@ -671,15 +670,19 @@ partial class MainForm
             this.menuProcessesSelectProcess,
             this.menuItemProcessesAllProcesses,
             this.menuItem16,
-            this.menuProcessesOptions/**/,
+            this.menuProcessesOptions
+            /* Added */,
             this.menuResolveMethodNamesFromIDA,
             this.menuResolveMethodNamesFromIDAHard,
             this.menuResolveMethodDllFix,
-            this.menuGetSequence/**/});
+            this.menuGetSequence
+            /* Added */});
             this.menuProcesses.Text = "&Processes";
-            /**/
+
+            /* Added */
             this.menuProcesses.Popup += new System.EventHandler(this.menuProcesses_Popup);
-            /**/
+            /* Added */
+
             // 
             // menuProcessesSelectProcess
             // 
@@ -754,7 +757,7 @@ partial class MainForm
             this.menuProcessesOptionsParseActCtx.Text = "Parse &Activation Context";
             this.menuProcessesOptionsParseActCtx.Click += new System.EventHandler(this.menuProcessesOptionsParseActCtx_Click);
 
-            /**/
+            /* Added */
 
             this.menuResolveMethodNamesFromIDA.Index = 4;
             this.menuResolveMethodNamesFromIDA.Text = "Resolve Method Name by IDA";
@@ -772,7 +775,7 @@ partial class MainForm
             this.menuGetSequence.Text = "Get Call Sequence";
             this.menuGetSequence.Click += new System.EventHandler(this.menuGetSequence_Click);
 
-            /**/
+            /* Added */
 
         // 
         // menuItemStorage
@@ -815,7 +818,8 @@ partial class MainForm
             this.menuViewRegistryViewOptions.Index = 1;
             this.menuViewRegistryViewOptions.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
             this.menuViewAlwaysShowSourceCode,
-            this.menuViewEnableAutoParsing});
+            this.menuViewEnableAutoParsing,
+            this.menuViewSaveProxyNamesOnExit});
             this.menuViewRegistryViewOptions.Text = "&Registry View Options";
             this.menuViewRegistryViewOptions.Popup += new System.EventHandler(this.menuViewRegistryViewOptions_Popup);
             // 
@@ -830,6 +834,12 @@ partial class MainForm
             this.menuViewEnableAutoParsing.Index = 1;
             this.menuViewEnableAutoParsing.Text = "&Enable Auto Parsing";
             this.menuViewEnableAutoParsing.Click += new System.EventHandler(this.menuViewEnableAutoParsing_Click);
+            // 
+            // menuViewSaveProxyNamesOnExit
+            // 
+            this.menuViewSaveProxyNamesOnExit.Index = 2;
+            this.menuViewSaveProxyNamesOnExit.Text = "Save Proxy Names on Exit";
+            this.menuViewSaveProxyNamesOnExit.Click += new System.EventHandler(this.menuViewSaveProxyNamesOnExit_Click);
             // 
             // menuHelp
             // 
@@ -885,9 +895,6 @@ partial class MainForm
     private System.Windows.Forms.MenuItem menuViewCLSIDsByLocalServer;
     private System.Windows.Forms.MenuItem menuViewIELowRights;
     private System.Windows.Forms.MenuItem menuViewLocalServices;
-    /* KWAKMU18 ADDED 20240907 - Add New Menu */
-    private System.Windows.Forms.MenuItem menuViewLocalServices2;
-    /* KWAKMU18 ADDED 20240907 - Add New Menu */
     private System.Windows.Forms.MenuItem menuViewAppIDs;
     private System.Windows.Forms.MenuItem menuObjectFromMarshalledStream;
     private System.Windows.Forms.MenuItem menuObjectFromSerializedStream;
@@ -960,17 +967,21 @@ partial class MainForm
     private System.Windows.Forms.MenuItem menuProcessesOptionsParseStubs;
     private System.Windows.Forms.MenuItem menuProcessesOptionsParseRegisteredClasses;
     private System.Windows.Forms.MenuItem menuProcessesOptionsParseActCtx;
-    /**/
+
+    /* Added */
     private System.Windows.Forms.MenuItem menuResolveMethodNamesFromIDA;
     private System.Windows.Forms.MenuItem menuResolveMethodNamesFromIDAHard;
     private System.Windows.Forms.MenuItem menuResolveMethodDllFix;
     private System.Windows.Forms.MenuItem menuGetSequence;
-    /**/
+    /*Added */
+
     private System.Windows.Forms.MenuItem menuViewRuntimeInterfaces;
     private System.Windows.Forms.MenuItem menuViewRuntimeInterfacesTree;
     private System.Windows.Forms.MenuItem menuItemView;
     private System.Windows.Forms.MenuItem menuViewRegistryViewOptions;
     private System.Windows.Forms.MenuItem menuViewAlwaysShowSourceCode;
     private System.Windows.Forms.MenuItem menuViewEnableAutoParsing;
+    private System.Windows.Forms.MenuItem menuViewSaveProxyNamesOnExit;
+    private System.Windows.Forms.MenuItem menuFileImportInteropAssembly;
 }
 

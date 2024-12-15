@@ -10,6 +10,11 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+
+// When we wants to get WalletService's IWalletCustomProperty interface,
+// we must get it by IWallet → IWalletTransactionManager → IWalletItem → IWalletCustomProperty. (not a unique path)
+// This form will analyze call sequence like above and show it.
 
 namespace OleViewDotNet.Forms
 {
@@ -52,13 +57,11 @@ namespace OleViewDotNet.Forms
                         String line = lines[i].Trim();
                         if (line.StartsWith("interface"))
                         {
-                            Console.WriteLine("Get Interface Name : " + line);
                             interfaceName = line.Split(' ')[1];
                             break;
                         }
                     }
                     stringList.Add(interfaceName);
-                    Console.WriteLine("interfaceName : " + interfaceName);
                     interfaces[interfaceName] = new List<String>();
                     for (int i = 0; i < lines.Length; i++)
                     {
@@ -69,12 +72,9 @@ namespace OleViewDotNet.Forms
                             for (int j = 1; j < parameters.Count; j++)
                             {
                                 String[] param = parameters[j].Trim().Split(' ');
-                                Console.Write("Now Processing : ");
-                                foreach (String p in param) Console.Write(p + " ");
-                                Console.WriteLine();
                                 if (param[0].Contains("out") && !param[param.Length - 2].StartsWith("int") &&
-                                    !param[param.Length-2].StartsWith("HSTRING") && !param[param.Length - 2].StartsWith("wchar") &&
-                                    !param[param.Length-2].StartsWith("GUID") && !param[param.Length - 2].StartsWith("byte") &&
+                                    !param[param.Length - 2].StartsWith("HSTRING") && !param[param.Length - 2].StartsWith("wchar") &&
+                                    !param[param.Length - 2].StartsWith("GUID") && !param[param.Length - 2].StartsWith("byte") &&
                                     !param[param.Length - 2].StartsWith("__int") && !param[param.Length - 2].StartsWith("uint") &&
                                     !param[param.Length - 2].StartsWith("Struct") && !param[param.Length - 2].ToLower().StartsWith("handle") &&
                                     !param[param.Length - 2].StartsWith("float") && !param[param.Length - 2].StartsWith("double") &&
@@ -82,9 +82,8 @@ namespace OleViewDotNet.Forms
                                     !param[param.Length - 2].StartsWith("handle") && !param[param.Length - 2].StartsWith("BSTR") &&
                                     !param[param.Length - 2].StartsWith("short") && !param[param.Length - 2].StartsWith("VARIANT"))
                                 {
-                                    Console.WriteLine($"Gotcha : {interfaceName} -> {param[param.Length - 2]}");
                                     param[param.Length - 2] = param[param.Length - 2].Replace("*", "");
-                                    if (!interfaces.Keys.Contains(param[param.Length-2]))
+                                    if (!interfaces.Keys.Contains(param[param.Length - 2]))
                                     {
                                         interfaces[param[param.Length - 2]] = new List<string>();
                                     }
@@ -97,42 +96,34 @@ namespace OleViewDotNet.Forms
                 stringList.Sort();
                 comboBox1.DataSource = stringList;
             }
-            
+
         }
 
+        // Get parameters from idl methods.
         public List<String> GetParameters(string functionDeclaration)
         {
-            Console.WriteLine($"CountParameters() Processing : {functionDeclaration}");
             if (functionDeclaration.Trim().EndsWith("(void)"))
                 return new List<string>();
-            // 템플릿 인자 제거
             string functionDefinition = Regex.Replace(functionDeclaration, @"<.*?>", "");
-            Console.WriteLine($"CountParameters() functionDefinition : {functionDefinition}");
-            // 함수 이름과 파라미터 부분 추출 (특수 소멸자 케이스 포함)
             Match match = Regex.Match(functionDefinition, @"([\w:~]+|`.*?')\s*\((.*?)\)\s*(?:const)?(?:override)?;?$");
             if (!match.Success)
                 return new List<string>();
 
             string functionName = match.Groups[1].Value;
             string parameters = match.Groups[2].Value;
-            
-            // 파라미터가 없는 경우
+
             if (string.IsNullOrWhiteSpace(parameters))
                 return new List<string>();
-            Console.WriteLine($"CountParameters() parameters : {parameters}");
-            // 대괄호 내부의 콤마 임시 대체
             parameters = Regex.Replace(parameters, @"\[([^\]]*)\]", m => m.Groups[0].Value.Replace(",", "<COMMA>"));
 
-            // 템플릿 인자 내부의 콤마 임시 대체
             parameters = Regex.Replace(parameters, @"<([^>]*)>", m => m.Groups[0].Value.Replace(",", "<COMMA>"));
 
-            // 파라미터 분리
             var paramList = parameters.Split(',').Select(p => p.Replace("<COMMA>", ",")).ToList();
-            foreach (var param in paramList) { Console.WriteLine("ParamList : " + param); }
             paramList.Insert(0, functionName);
-            // 빈 파라미터 제거 및 개수 반환
             return paramList;
         }
+        
+        // Find sequence by Search method and store with Dictionary structure.
         public void GetSequence(String baseInterface)
         {
             if (!interfaces.Keys.Contains(baseInterface))
@@ -153,16 +144,18 @@ namespace OleViewDotNet.Forms
                 return;
             }
             textBox2.Text = "";
-            foreach(List<String> now in sequence)
+            foreach (List<String> now in sequence)
             {
                 textBox2.Text += String.Join(" → ", now) + "\r\n";
             }
         }
 
+        // Parse interface's each method and find interface parameters recursively.
         public void Search(List<String> nowSequence, String next)
         {
-            
-            if (interfaces[next].Count == 0) {
+
+            if (interfaces[next].Count == 0)
+            {
                 nowSequence.Add(next);
                 bool flag = true;
                 foreach (List<String> now in sequence)
@@ -180,7 +173,7 @@ namespace OleViewDotNet.Forms
             if (nowSequence.Contains(next))
             {
                 bool flag = true;
-                foreach(List<String> now in sequence)
+                foreach (List<String> now in sequence)
                 {
                     if (now.SequenceEqual(nowSequence))
                     {

@@ -18,7 +18,6 @@ using OleViewDotNet.Database;
 using OleViewDotNet.Interop;
 using OleViewDotNet.Proxy;
 using OleViewDotNet.TypeLib.Instance;
-using OleViewDotNet.TypeLib.Parser;
 using OleViewDotNet.Utilities.Format;
 using System;
 using System.Collections.Generic;
@@ -41,6 +40,7 @@ public sealed class COMTypeLib : COMTypeLibReference, ICOMGuid, ICOMSourceCodeFo
             $"version({Version})"
         };
         attrs.AddRange(_doc.GetAttrs());
+        attrs.AddRange(CustomData.Select(d => d.FormatAttribute()));
         builder.AppendAttributes(attrs);
         builder.AppendLine($"library {Name} {{");
         using (builder.PushIndent(4))
@@ -67,7 +67,7 @@ public sealed class COMTypeLib : COMTypeLibReference, ICOMGuid, ICOMSourceCodeFo
     #endregion
 
     #region Internal Members
-    internal COMTypeLib(string path, COMTypeDocumentation doc, TYPELIBATTR attr, List<COMTypeLibTypeInfo> types, IEnumerable<COMTypeLibReference> ref_typelibs) 
+    internal COMTypeLib(string path, COMTypeDocumentation doc, TYPELIBATTR attr, List<COMTypeLibTypeInfo> types, IEnumerable<COMTypeLibReference> ref_typelibs, IEnumerable<COMTypeCustomDataItem> custom_data)
         : base(doc, attr)
     {
         Path = path ?? string.Empty;
@@ -94,6 +94,7 @@ public sealed class COMTypeLib : COMTypeLibReference, ICOMGuid, ICOMSourceCodeFo
         Classes = types.OfType<COMTypeLibCoClass>().ToList().AsReadOnly();
         ComplexTypes = types.OfType<COMTypeLibComplexType>().ToList().AsReadOnly();
         ReferencedTypeLibs = ref_typelibs.Where(t => !IsSameTypeLib(t)).ToList().AsReadOnly();
+        CustomData = custom_data.ToList().AsReadOnly();
     }
 
     void ICOMSourceCodeFormattable.Format(COMSourceCodeBuilder builder)
@@ -110,25 +111,21 @@ public sealed class COMTypeLib : COMTypeLibReference, ICOMGuid, ICOMSourceCodeFo
             throw new ArgumentException($"'{nameof(path)}' cannot be null or whitespace.", nameof(path));
         }
 
-        using COMTypeLibParser parser = new(path);
-        return parser.Parse();
+        using COMTypeLibInstance type_lib = COMTypeLibInstance.FromFile(path);
+        return type_lib.Parse();
     }
 
     public static COMTypeLib FromObject(object obj)
     {
-        IDispatch disp = (IDispatch)obj;
-
-        disp.GetTypeInfo(0, 0x409, out ITypeInfo type_info);
-        type_info.GetContainingTypeLib(out ITypeLib type_lib, out _);
-        using COMTypeLibParser parser = new(type_lib);
-        return parser.Parse();
+        using COMTypeLibInstance type_lib = COMTypeLibInstance.FromObject(obj);
+        return type_lib.Parse();
     }
 
     public static COMTypeLib FromRegistered(Guid type_lib_id,
         COMVersion version, int lcid)
     {
-        using COMTypeLibParser parser = new(type_lib_id, version, lcid);
-        return parser.Parse();
+        using COMTypeLibInstance type_lib = COMTypeLibInstance.FromRegistered(type_lib_id, version, lcid);
+        return type_lib.Parse();
     }
 
     public static explicit operator COMTypeLib(COMTypeLibVersionEntry type_lib) => type_lib.Parse();
@@ -148,6 +145,7 @@ public sealed class COMTypeLib : COMTypeLibReference, ICOMGuid, ICOMSourceCodeFo
     public IReadOnlyList<COMTypeLibComplexType> ComplexTypes { get; }
     public IReadOnlyDictionary<Guid, COMTypeLibInterface> InterfacesByIid => Interfaces.ToDictionary(i => i.Uuid);
     public IReadOnlyList<COMTypeLibReference> ReferencedTypeLibs { get; }
+    public IReadOnlyList<COMTypeCustomDataItem> CustomData { get; }
     Guid ICOMGuid.ComGuid => TypeLibId;
     bool ICOMSourceCodeFormattable.IsFormattable => true;
     #endregion

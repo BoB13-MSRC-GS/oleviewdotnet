@@ -27,7 +27,7 @@ using System.Runtime.InteropServices;
 
 namespace OleViewDotNet.Proxy;
 
-public class COMProxyFile : IProxyFormatter, ICOMSourceCodeFormattable
+public class COMProxyFile : IProxyFormatter, ICOMSourceCodeFormattable, ICOMSourceCodeEditable
 {
     #region Private Members
     private readonly COMRegistry m_registry;
@@ -141,6 +141,11 @@ public class COMProxyFile : IProxyFormatter, ICOMSourceCodeFormattable
 
     public static COMProxyFile GetFromCLSID(COMCLSIDEntry clsid)
     {
+        if (clsid is null)
+        {
+            throw new ArgumentNullException(nameof(clsid));
+        }
+
         if (clsid.IsAutomationProxy)
         {
             throw new ArgumentException("Can't get proxy for automation interfaces.");
@@ -192,18 +197,47 @@ public class COMProxyFile : IProxyFormatter, ICOMSourceCodeFormattable
     void ICOMSourceCodeFormattable.Format(COMSourceCodeBuilder builder)
     {
         INdrFormatter formatter = builder.GetNdrFormatter();
-        if (!builder.InterfacesOnly)
+        if (formatter is INdrFormatterBuilder format_builder)
         {
-            foreach (var type in ComplexTypes)
+            if (!builder.InterfacesOnly)
             {
-                builder.AppendLine(formatter.FormatComplexType(type.Entry));
+                foreach (var type in ComplexTypes)
+                {
+                    format_builder.FormatComplexType(builder, type.Entry);
+                }
+                builder.AppendLine();
             }
-            builder.AppendLine();
-        }
 
-        foreach (var proxy in Entries)
+            foreach (var proxy in Entries)
+            {
+                format_builder.FormatComProxy(builder, proxy.Entry);
+            }
+        }
+        else
         {
-            builder.AppendLine(formatter.FormatComProxy(proxy.Entry));
+            if (!builder.InterfacesOnly)
+            {
+                foreach (var type in ComplexTypes)
+                {
+                    builder.AppendLine(formatter.FormatComplexType(type.Entry));
+                }
+                builder.AppendLine();
+            }
+
+            foreach (var proxy in Entries)
+            {
+                builder.AppendLine(formatter.FormatComProxy(proxy.Entry));
+            }
+        }
+    }
+
+    bool ICOMSourceCodeEditable.IsEditable => true;
+
+    void ICOMSourceCodeEditable.Update()
+    {
+        foreach (ICOMSourceCodeEditable proxy in Entries)
+        {
+            proxy.Update();
         }
     }
     #endregion

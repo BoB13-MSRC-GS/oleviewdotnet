@@ -28,6 +28,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
+using System.Reflection;
 using System.Windows.Forms;
 
 namespace OleViewDotNet;
@@ -168,7 +169,7 @@ public static class EntryPoint
         string view_name = null;
         bool access_sd = false;
         COMRegistryMode mode = COMRegistryMode.Merged;
-        IEnumerable<COMServerType> server_types = new COMServerType[] { COMServerType.InProcHandler32, 
+        IEnumerable<COMServerType> server_types = new COMServerType[] { COMServerType.InProcHandler32,
             COMServerType.InProcServer32, COMServerType.LocalServer32 };
         NtToken enum_token = null;
         string enum_class = null;
@@ -200,6 +201,7 @@ public static class EntryPoint
             { "pipe=", "Specify the pipe to send interface enumeration output.", v => enum_pipe = v },
             { "clsctx=", "Specify the CLSCTX to create the object for interface enumeration.", v => enum_clsctx = (CLSCTX)Enum.Parse(typeof(CLSCTX), v, true) },
             { "arch=", "Specify the architecture to run. Used only for admin elevation.", v => arch = (ProgramArchitecture)Enum.Parse(typeof(ProgramArchitecture), v, true) },
+            { "debug", "Specify to show additional debug information.", v => m_show_stack_trace = v is not null },
             { "h|help",  "Show this message and exit.", v => show_help = v is not null },
         };
 
@@ -274,7 +276,7 @@ public static class EntryPoint
                 {
                     try
                     {
-                        registry = COMUtilities.LoadRegistry(null, default_db);
+                        registry = FormUtils.LoadRegistry(null, default_db);
                         registry.FilePath = null;
                     }
                     catch
@@ -284,8 +286,8 @@ public static class EntryPoint
                     }
                 }
 
-                registry ??= database_file is not null ? COMUtilities.LoadRegistry(null, database_file)
-                        : COMUtilities.LoadRegistry(null, mode);
+                registry ??= database_file is not null ? FormUtils.LoadRegistry(null, database_file)
+                        : FormUtils.LoadRegistry(null, mode);
 
                 if (delete_database && database_file is not null)
                 {
@@ -295,7 +297,7 @@ public static class EntryPoint
 
                 if (query_interfaces)
                 {
-                    if (!COMUtilities.QueryAllInterfaces(null, registry.Clsids.Values, server_types, concurrent_queries, refresh_interfaces))
+                    if (!FormUtils.QueryAllInterfaces(null, registry.Clsids.Values, server_types, concurrent_queries, refresh_interfaces))
                     {
                         Environment.Exit(1);
                     }
@@ -325,13 +327,15 @@ public static class EntryPoint
         }
     }
 
+    private static bool m_show_stack_trace;
+
     public static void ShowError(IWin32Window window, Exception ex)
     {
-        ShowError(window, ex, false);
-    }
+        if (ex is TargetInvocationException iex && iex.InnerException is not null)
+        {
+            ex = iex.InnerException;
+        }
 
-    public static void ShowError(IWin32Window window, Exception ex, bool stack_trace)
-    {
-        MessageBox.Show(window, stack_trace ? ex.ToString() : ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        MessageBox.Show(window, m_show_stack_trace ? ex.ToString() : ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 }

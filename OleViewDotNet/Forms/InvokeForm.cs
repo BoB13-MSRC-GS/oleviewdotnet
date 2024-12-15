@@ -14,10 +14,14 @@
 //    You should have received a copy of the GNU General Public License
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
+using NtApiDotNet.Win32.Rpc;
 using OleViewDotNet.Database;
 using OleViewDotNet.Interop;
-using OleViewDotNet.Utilities;
+using OleViewDotNet.TypeManager;
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
@@ -27,7 +31,7 @@ namespace OleViewDotNet.Forms;
 
 internal partial class InvokeForm : Form
 {
-    private readonly MethodInfo m_mi;
+    private readonly MethodBase m_mi;
     private readonly object m_pObject;
     private object m_ret;
     private readonly string m_objName;
@@ -39,9 +43,14 @@ internal partial class InvokeForm : Form
         public object data;
     }
 
-    private ParamData[] m_paramdata;        
+    private List<ParamData> m_paramdata;
 
-    public InvokeForm(COMRegistry registry, MethodInfo mi, object pObject, string objName)
+    private static bool IsComObject(object obj)
+    {
+        return Marshal.IsComObject(obj) || obj is ICOMObjectWrapper;
+    }
+
+    public InvokeForm(COMRegistry registry, MethodBase mi, object pObject, string objName)
     {
         m_mi = mi;
         m_pObject = pObject;
@@ -49,19 +58,19 @@ internal partial class InvokeForm : Form
         m_registry = registry;
         LoadParameters();
 
-        InitializeComponent(); 
+        InitializeComponent();
     }
 
     private void LoadParameters()
     {
         ParameterInfo[] pis = m_mi.GetParameters();
-        m_paramdata = new ParamData[pis.Length];
+        m_paramdata = new();
 
         for (int i = 0; i < pis.Length; i++)
         {
             ParameterInfo pi = pis[i];
             ParamData data = new();
-            m_paramdata[i] = data;
+            m_paramdata.Add(data);
 
             data.pi = pis[i];
             if (!pi.IsOptional)
@@ -81,20 +90,24 @@ internal partial class InvokeForm : Form
 
         try
         {
-            if (t.GetElementType() is not null)
+            if (t.IsByRef)
             {
                 t = t.GetElementType();
             }
-           
+
             if (t == typeof(string))
             {
                 ret = string.Empty;
+            }
+            else if (t == typeof(byte[]))
+            {
+                ret = Array.Empty<byte>();
             }
             else if (t == typeof(IBindCtx))
             {
                 ret = NativeMethods.CreateBindCtx(0);
             }
-            else
+            else if (!t.IsAbstract)
             {
                 /* Try the default activation route */
                 ret = System.Activator.CreateInstance(t);
@@ -124,14 +137,7 @@ internal partial class InvokeForm : Form
         {
             ListViewItem item = listViewParameters.Items.Add(data.pi.Name);
             item.SubItems.Add(data.pi.ParameterType.ToString());
-            if (data.data is null)
-            {
-                item.SubItems.Add("<null>");
-            }
-            else
-            {
-                item.SubItems.Add(data.data.ToString());
-            }
+            item.SubItems.Add(FormUtils.FormatObject(data.data, false));
 
             string strDir = "";
 
@@ -165,73 +171,101 @@ internal partial class InvokeForm : Form
     }
 
     private void InvokeForm_Load(object sender, EventArgs e)
-    {            
+    {
         RefreshParameters();
 
         Text = "Invoke " + m_mi.Name;
-        lblReturn.Text = "Return: " + m_mi.ReturnType.ToString();
+        if (m_mi is MethodInfo mi)
+        {
+            lblReturn.Text = "Return: " + mi.ReturnType.ToString();
+        }
     }
 
-    private void listViewParameters_DoubleClick(object sender, EventArgs e)
+    private ParamData GetSelectedParam()
     {
         if (listViewParameters.SelectedItems.Count > 0)
         {
             ListViewItem item = listViewParameters.SelectedItems[0];
-            ParamData data = (ParamData)item.Tag;
-
-            Type baseType = data.pi.ParameterType;
-
-            if (baseType.GetElementType() is not null)
-            {
-                baseType = baseType.GetElementType();
-            }
-
-            if(baseType == typeof(IStream))
-            {
-                using CreateIStreamForm frm = new();
-                if (frm.ShowDialog() == DialogResult.OK)
-                {
-                    data.data = frm.Stream;
-                }
-            }
-            else
-            {
-                using GetTypeForm frm = new(data.pi.ParameterType, data.data);
-                if (frm.ShowDialog() == DialogResult.OK)
-                {
-                    data.data = frm.Data;
-                }
-            }
-
-            RefreshParameters();
+            return item.Tag as ParamData;
         }
+        return null;
+    }
+
+    private void SetValue_Handler(object sender, EventArgs e)
+    {
+        ParamData data = GetSelectedParam();
+        if (data is null)
+        {
+            return;
+        }
+        Type baseType = data.pi.ParameterType;
+
+        if (baseType.IsByRef)
+        {
+            baseType = baseType.GetElementType();
+        }
+
+        if (baseType == typeof(IStream))
+        {
+            using CreateIStreamForm frm = new();
+            if (frm.ShowDialog() == DialogResult.OK)
+            {
+                data.data = frm.Stream;
+            }
+        }
+        else if (baseType == typeof(byte[]))
+        {
+            using HexEditorForm frm = new();
+            frm.Bytes = data.data as byte[];
+            if (frm.ShowDialog() == DialogResult.OK)
+            {
+                data.data = frm.Bytes;
+            }
+        }
+        else
+        {
+            using GetTypeForm frm = new(data.pi.ParameterType, data.data);
+            if (frm.ShowDialog() == DialogResult.OK)
+            {
+                data.data = frm.Data;
+            }
+        }
+
+        RefreshParameters();
     }
 
     private void btnInvoke_Click(object sender, EventArgs e)
-    {            
-        object[] p = new object[m_paramdata.Length];
+    {
+        object[] p = new object[m_paramdata.Count];
         int i = 0;
 
         foreach (ParamData data in m_paramdata)
-        {                
+        {
             p[i++] = data.data;
         }
 
         try
         {
-            m_ret = m_mi.Invoke(m_pObject, p);
+            if (m_mi is ConstructorInfo ci)
+            {
+                m_ret = ci.Invoke(p);
+            }
+            else
+            {
+                m_ret = m_mi.Invoke(m_pObject, p);
+            }
             if (m_ret is not null)
             {
                 lblReturn.Text = "Return: " + m_ret.GetType().ToString();
-                textBoxReturn.Text = m_ret.ToString();
+                textBoxReturn.Text = FormUtils.FormatObject(m_ret, true);
 
-                if (Marshal.IsComObject(m_ret))
+                if (IsComObject(m_ret))
                 {
                     btnOpenObject.Enabled = true;
                 }
             }
 
-            for (i = 0; i < m_paramdata.Length; i++)
+            for (i = 0; i < m_paramdata.Count; i++)
             {
                 if (m_paramdata[i].pi.IsOut)
                 {
@@ -249,44 +283,120 @@ internal partial class InvokeForm : Form
                 printEx = printEx.InnerException;
             }
 
-            MessageBox.Show(printEx.Message, "Invoke Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
     private void InvokeForm_FormClosed(object sender, FormClosedEventArgs e)
     {
         /* Try and clean up any referenced Com Objects */
-        foreach (ParamData data in m_paramdata)
+        m_paramdata.Clear();
+        GC.Collect();
+    }
+
+    private void OpenObject(object obj, Type type, bool info, bool close)
+    {
+        if (!IsComObject(obj))
         {
-            if (data.data is not null)
+            return;
+        }
+
+        Control c;
+        if (info)
+        {
+            obj = COMTypeManager.Unwrap(obj);
+            c = new ObjectInformation(m_registry, null, m_objName, obj,
+                new(), m_registry.GetInterfacesForObject(obj).ToArray());
+        }
+        else
+        {
+            if (obj is COMObjectWrapper wrapper)
             {
-                try
-                {
-                    if (data.data is IStreamImpl)
-                    {
-                        ((IStreamImpl)data.data).Dispose();
-                    }
-                    else
-                    {
-                        while (Marshal.ReleaseComObject(data.data) != 0)
-                        {
-                        }
-                    }
-                }
-                catch (Exception)
-                {
-                }
+                type = wrapper.Type;
+                obj = wrapper.Unwrap();
             }
+
+            c = new TypedObjectViewer(m_registry, m_objName, obj, type);
+        }
+        EntryPoint.GetMainForm(m_registry).HostControl(c);
+        if (close)
+        {
+            DialogResult = DialogResult.OK;
+            Close();
         }
     }
 
     private void btnOpenObject_Click(object sender, EventArgs e)
     {
-        if (m_ret is not null)
+        Type type;
+        if (m_mi is MethodInfo mi)
         {
-            EntryPoint.GetMainForm(m_registry).HostControl(new TypedObjectViewer(m_registry, m_objName, m_ret, m_mi.ReturnType));
-            DialogResult = DialogResult.OK;
-            Close();
+            type = mi.ReturnType;
+        }
+        else
+        {
+            type = m_mi.DeclaringType;
+        }
+        OpenObject(m_ret, type, false, true);
+    }
+
+    private void contextMenuStrip_Opening(object sender, CancelEventArgs e)
+    {
+        ParamData data = GetSelectedParam();
+        if (data is null)
+        {
+            return;
+        }
+        bool is_com_obj = IsComObject(data.data);
+        openObjectToolStripMenuItem.Enabled = is_com_obj;
+        openObjectInformationToolStripMenuItem.Enabled = is_com_obj;
+    }
+
+    private void openObjectToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ParamData data = GetSelectedParam();
+        if (data is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Type type = data.pi.ParameterType;
+            if (data.data is ICOMObjectWrapper)
+            {
+                type = data.data.GetType();
+            }
+
+            OpenObject(data.data, type, false, false);
+        }
+        catch (Exception ex)
+        {
+            EntryPoint.ShowError(this, ex);
+        }
+    }
+
+    private void openObjectInformationToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        ParamData data = GetSelectedParam();
+        if (data is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Type type = data.pi.ParameterType;
+            if (data.data is RpcClientBase)
+            {
+                type = data.data.GetType();
+            }
+
+            OpenObject(data.data, type, true, false);
+        }
+        catch (Exception ex)
+        {
+            EntryPoint.ShowError(this, ex);
         }
     }
 }

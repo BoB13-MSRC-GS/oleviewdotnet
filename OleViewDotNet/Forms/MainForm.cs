@@ -21,6 +21,7 @@ using OleViewDotNet.Processes;
 using OleViewDotNet.Proxy;
 using OleViewDotNet.Security;
 using OleViewDotNet.TypeLib;
+using OleViewDotNet.TypeManager;
 using OleViewDotNet.Utilities;
 using System;
 using System.Collections.Generic;
@@ -28,24 +29,27 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using WeifenLuo.WinFormsUI.Docking;
 
+/* Added */
+using System.Runtime.InteropServices;
+/* Added */
+
 namespace OleViewDotNet.Forms;
 
 internal partial class MainForm : Form
 {
-    private readonly DockPanel   m_dockPanel;
+    private readonly DockPanel m_dockPanel;
     private readonly COMRegistry m_registry;
     private PropertyGrid m_property_grid;
 
     private void UpdateTitle()
     {
-        Text = $"OleView .NET v{COMUtilities.GetVersion()}";
-        if (COMUtilities.IsAdministrator())
+        Text = $"OleView .NET v{AppUtilities.GetVersion()}";
+        if (AppUtilities.IsAdministrator())
         {
             Text += " - Administrator";
             menuFileOpenAsAdmin.Visible = false;
@@ -67,6 +71,7 @@ internal partial class MainForm : Form
         {
             Text += $" - {m_registry.FilePath}";
         }
+        Text += $" - MSRC Gasan";
     }
 
     public MainForm(COMRegistry registry)
@@ -138,9 +143,6 @@ internal partial class MainForm : Form
         props.Add("CLSID", ent.Clsid.FormatGuid());
         props.Add("Name", ent.Name);
         props.Add("Server", ent.DefaultServer);
-
-        /* Need to implement a type library reader */
-        Type dispType = COMUtilities.GetDispatchTypeInfo(this, obj);
 
         if (!ent.InterfacesLoaded)
         {
@@ -244,48 +246,23 @@ internal partial class MainForm : Form
             }
             else
             {
-                IntPtr pObj;
-                int hr;
+                using var pObj = class_factory ? SafeComObjectHandle.GetClassObject(clsid, clsctx, COMKnownGuids.IID_IUnknown) :
+                    SafeComObjectHandle.CreateInstance(clsid, clsctx, COMKnownGuids.IID_IUnknown);
 
-                if (class_factory)
-                {
-                    hr = NativeMethods.CoGetClassObject(clsid, clsctx, null, COMKnownGuids.IID_IUnknown, out pObj);
-                }
-                else
-                {
-                    hr = NativeMethods.CoCreateInstance(clsid, IntPtr.Zero, clsctx,
-                                COMKnownGuids.IID_IUnknown, out pObj);
-                }
-
-                if (hr != 0)
-                {
-                    Marshal.ThrowExceptionForHR(hr);
-                }
-
-                try
-                {
-                    ints = m_registry.GetInterfacesForIUnknown(pObj).ToArray();
-                    comObj = Marshal.GetObjectForIUnknown(pObj);
-                    strObjName = clsid.FormatGuid();
-                    props.Add("CLSID", clsid.FormatGuid());
-                }
-                finally
-                {
-                    Marshal.Release(pObj);
-                }
+                ints = m_registry.GetInterfacesForIUnknown(pObj).ToArray();
+                comObj = pObj.ToObject();
+                strObjName = clsid.FormatGuid();
+                props.Add("CLSID", clsid.FormatGuid());
             }
 
             if (comObj is not null)
             {
-                /* Need to implement a type library reader */
-                Type dispType = COMUtilities.GetDispatchTypeInfo(this, comObj);
-
                 HostControl(new ObjectInformation(m_registry, ent, strObjName, comObj, props, ints.ToArray()));
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -333,7 +310,7 @@ internal partial class MainForm : Form
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                EntryPoint.ShowError(this, ex);
             }
         }
     }
@@ -365,7 +342,6 @@ internal partial class MainForm : Form
                 props.Add("CLSID", clsid.FormatGuid());
             }
 
-            Type dispType = COMUtilities.GetDispatchTypeInfo(this, comObj);
             HostControl(new ObjectInformation(m_registry, ent, strObjName, comObj, props, ints.ToArray()));
         }
     }
@@ -385,7 +361,7 @@ internal partial class MainForm : Form
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                EntryPoint.ShowError(this, ex);
             }
         }
     }
@@ -417,9 +393,9 @@ internal partial class MainForm : Form
         {
             AppUtilities.StartArchProcess(ProgramArchitecture.X86, string.Empty);
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -428,18 +404,13 @@ internal partial class MainForm : Form
     private async Task ParseOrBindMoniker(bool bind)
     {
         using BuildMonikerForm frm = new(_last_moniker);
+        frm.BindMoniker = bind;
         if (frm.ShowDialog(this) == DialogResult.OK)
         {
             try
             {
                 _last_moniker = frm.MonikerString;
-                object comObj = frm.Moniker;
-                if (bind)
-                {
-                    Guid iid = COMKnownGuids.IID_IUnknown;
-                    frm.Moniker.BindToObject(frm.BindContext, null, ref iid, out comObj);
-                }
-
+                object comObj = frm.Result;
                 if (comObj is not null)
                 {
                     await OpenObjectInformation(comObj, _last_moniker);
@@ -451,7 +422,7 @@ internal partial class MainForm : Form
             }
         }
     }
-    
+
     private async void menuObjectBindMoniker_Click(object sender, EventArgs e)
     {
         await ParseOrBindMoniker(true);
@@ -496,7 +467,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -511,7 +482,7 @@ internal partial class MainForm : Form
         dlg.Filter = "OleViewDotNet DB File (*.ovdb)|*.ovdb|All Files (*.*)|*.*";
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
-            LoadRegistry(() => COMUtilities.LoadRegistry(this, dlg.FileName));
+            LoadRegistry(() => FormUtils.LoadRegistry(this, dlg.FileName));
         }
     }
 
@@ -563,18 +534,18 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
     private void menuFileOpenMachineOnly_Click(object sender, EventArgs e)
     {
-        LoadRegistry(() => COMUtilities.LoadRegistry(this, COMRegistryMode.MachineOnly));
+        LoadRegistry(() => FormUtils.LoadRegistry(this, COMRegistryMode.MachineOnly));
     }
 
     private void menuFileOpenUserOnly_Click(object sender, EventArgs e)
     {
-        LoadRegistry(() => COMUtilities.LoadRegistry(this, COMRegistryMode.UserOnly));
+        LoadRegistry(() => FormUtils.LoadRegistry(this, COMRegistryMode.UserOnly));
     }
 
     private void menuFileDiff_Click(object sender, EventArgs e)
@@ -605,7 +576,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -638,7 +609,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -693,7 +664,7 @@ internal partial class MainForm : Form
         using QueryInterfacesOptionsForm options = new();
         if (options.ShowDialog(this) == DialogResult.OK)
         {
-            COMUtilities.QueryAllInterfaces(this, m_registry.Clsids.Values,
+            FormUtils.QueryAllInterfaces(this, m_registry.Clsids.Values,
                 options.ServerTypes, options.ConcurrentQueries,
                 options.RefreshInterfaces);
         }
@@ -735,7 +706,7 @@ internal partial class MainForm : Form
     private void LoadProcesses<TKey>(Func<COMProcessEntry, TKey> orderby_selector)
     {
         ConfigureSymbols();
-        IEnumerable<COMProcessEntry> processes = COMUtilities.LoadProcesses(this, m_registry);
+        IEnumerable<COMProcessEntry> processes = FormUtils.LoadProcesses(this, m_registry);
         if (processes is not null && processes.Any())
         {
             OpenView(COMRegistryDisplayMode.Processes, processes.OrderBy(orderby_selector));
@@ -747,7 +718,7 @@ internal partial class MainForm : Form
         try
         {
             ConfigureSymbols();
-            var proc = COMUtilities.LoadProcesses(new int[] { COMUtilities.GetProcessIdFromIPid(ipid) }, this, m_registry).FirstOrDefault();
+            var proc = FormUtils.LoadProcesses(new int[] { COMUtilities.GetProcessIdFromIPid(ipid) }, this, m_registry).FirstOrDefault();
             if (proc is not null)
             {
                 COMIPIDEntry ipid_entry = proc.Ipids.Where(e => e.Ipid == ipid).FirstOrDefault();
@@ -776,7 +747,7 @@ internal partial class MainForm : Form
         try
         {
             ConfigureSymbols();
-            var processes = COMUtilities.LoadProcesses(new int[] { pid }, this, m_registry);
+            var processes = FormUtils.LoadProcesses(new int[] { pid }, this, m_registry);
             if (!processes.Any())
             {
                 throw new ArgumentException($"Process {pid} has not initialized COM, or is inaccessible");
@@ -809,7 +780,7 @@ internal partial class MainForm : Form
     {
         try
         {
-            ProcessStartInfo start_info = new(Assembly.GetEntryAssembly().Location, 
+            ProcessStartInfo start_info = new(Assembly.GetEntryAssembly().Location,
                 $"--arch={AppUtilities.CurrentArchitecture}");
             start_info.UseShellExecute = true;
             start_info.Verb = "runas";
@@ -818,7 +789,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -885,7 +856,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            EntryPoint.ShowError(this, ex, true);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -905,7 +876,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            EntryPoint.ShowError(this, ex, true);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -964,7 +935,7 @@ internal partial class MainForm : Form
 
     private void MainForm_KeyUp(object sender, KeyEventArgs e)
     {
-        if(e.Control&&(e.KeyCode == Keys.W))
+        if (e.Control && (e.KeyCode == Keys.W))
         {
             m_dockPanel.ActivePane.CloseActiveContent();
             return;
@@ -998,7 +969,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -1010,7 +981,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -1028,7 +999,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -1044,7 +1015,7 @@ internal partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -1101,7 +1072,7 @@ internal partial class MainForm : Form
         ProgramSettings.ParseActivationContext = !ProgramSettings.ParseActivationContext;
     }
 
-    /**/
+    /* Added */
 
     private void menuResolveMethodNamesFromIDA_Click(object sender, EventArgs e)
     {
@@ -1122,8 +1093,9 @@ internal partial class MainForm : Form
         callSequenceForm.Show();
     }
 
-    private void menuResolveMethodDllFix_Click(object sender, EventArgs e) {
-        if (ProgramSettings.ResolveMethodNamesFromIDAHard) 
+    private void menuResolveMethodDllFix_Click(object sender, EventArgs e)
+    {
+        if (ProgramSettings.ResolveMethodNamesFromIDAHard)
             ProgramSettings.ResolveMethodNamesFromIDAHard = !ProgramSettings.ResolveMethodNamesFromIDAHard;
         ProgramSettings.ResolveMethodDllFix = !ProgramSettings.ResolveMethodDllFix;
         if (ProgramSettings.ResolveMethodDllFix)
@@ -1133,14 +1105,14 @@ internal partial class MainForm : Form
         }
     }
 
-    /**/
-
     private void menuProcesses_Popup(object sender, EventArgs e)
     {
         menuResolveMethodNamesFromIDA.Checked = ProgramSettings.ResolveMethodNamesFromIDA;
         menuResolveMethodNamesFromIDAHard.Checked = ProgramSettings.ResolveMethodNamesFromIDAHard;
         menuResolveMethodDllFix.Checked = ProgramSettings.ResolveMethodDllFix;
     }
+
+    /* Added */
 
     private void menuProcessesOptions_Popup(object sender, EventArgs e)
     {
@@ -1160,6 +1132,20 @@ internal partial class MainForm : Form
             }
             catch
             {
+            }
+        }
+        if (ProgramSettings.SaveProxyNamesOnExit)
+        {
+            foreach (var proxy in COMProxyInterface.GetModifiedProxies())
+            {
+                try
+                {
+                    var names = proxy.GetNames();
+                    names.SaveToCache();
+                }
+                catch
+                {
+                }
             }
         }
     }
@@ -1183,6 +1169,7 @@ internal partial class MainForm : Form
     {
         menuViewAlwaysShowSourceCode.Checked = ProgramSettings.AlwaysShowSourceCode;
         menuViewEnableAutoParsing.Checked = ProgramSettings.EnableAutoParsing;
+        menuViewSaveProxyNamesOnExit.Checked = ProgramSettings.SaveProxyNamesOnExit;
     }
 
     private void menuViewAlwaysShowSourceCode_Click(object sender, EventArgs e)
@@ -1195,5 +1182,32 @@ internal partial class MainForm : Form
     {
         menuViewEnableAutoParsing.Checked = !menuViewEnableAutoParsing.Checked;
         ProgramSettings.EnableAutoParsing = menuViewEnableAutoParsing.Checked;
+    }
+
+    private void menuViewSaveProxyNamesOnExit_Click(object sender, EventArgs e)
+    {
+        menuViewSaveProxyNamesOnExit.Checked = !menuViewSaveProxyNamesOnExit.Checked;
+        ProgramSettings.SaveProxyNamesOnExit = menuViewSaveProxyNamesOnExit.Checked;
+    }
+
+    private void menuFileImportInteropAssembly_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            using OpenFileDialog dlg = new();
+            dlg.Filter = "Assembly Files (*.dll)|*.dll|All Files (*.*)|*.*";
+            if (dlg.ShowDialog(this) == DialogResult.OK)
+            {
+                string path = dlg.FileName;
+                Assembly asm = Assembly.LoadFrom(path);
+                bool autoload = MessageBox.Show(this, "Do you want to automatically load this library next time?",
+                    "Auto Load?", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+                COMTypeManager.LoadTypesFromAssembly(asm, autoload);
+            }
+        }
+        catch (Exception ex)
+        {
+            EntryPoint.ShowError(this, ex);
+        }
     }
 }

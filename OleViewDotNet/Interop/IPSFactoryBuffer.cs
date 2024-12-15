@@ -36,6 +36,6 @@ public interface IPSFactoryBuffer
     (
         in Guid riid,
         [MarshalAs(UnmanagedType.IUnknown)] object pUnkServer,
-        out IntPtr ppStub // IRpcStubBuffer**
+        out IRpcStubBuffer ppStub // IRpcStubBuffer**
     );
 }

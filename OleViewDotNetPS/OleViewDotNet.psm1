@@ -17,6 +17,7 @@
 Set-StrictMode -Version Latest
 
 $Script:CurrentComDatabase = $null
+[OleViewDotNetPS.Wrappers.COMWrapperFactory]::EnableScripting()
 
 function New-CallbackProgress {
     Param(
@@ -50,8 +51,6 @@ function Wrap-ComObject {
         [object]$Object,
         [Parameter(Mandatory, Position = 1, ParameterSetName = "FromIid")]
         [Guid]$Iid,
-        [Parameter(ParameterSetName = "FromIid")]
-        [switch]$LoadType,
         [Parameter(Mandatory, Position = 1, ParameterSetName = "FromType")]
         [Type]$Type,
         [Parameter(Mandatory, Position = 1, ParameterSetName = "FromInterface")]
@@ -68,31 +67,27 @@ function Wrap-ComObject {
         return $Object
     }
 
-    $db = $null
-
-    if ($LoadType) {
-        $db = Get-CurrentComDatabase $Database
-        if ($null -eq $db) {
-            Write-Error "No database specified and current database isn't set"
-            return
-        }
-     }
+    $db = Get-CurrentComDatabase $Database
+    if ($null -eq $db) {
+        Write-Error "No database specified and current database isn't set"
+        return
+    }
 
     switch($PSCmdlet.ParameterSetName) {
         "FromIid" {
-            [OleViewDotNet.Wrappers.COMWrapperFactory]::Wrap($Object, $Iid, $db)
+            [OleViewDotNet.TypeManager.COMTypeManager]::Wrap($Object, $Iid, $db)
         }
         "FromType" {
-            [OleViewDotNet.Wrappers.COMWrapperFactory]::Wrap($Object, $Type)
+            [OleViewDotNet.TypeManager.COMTypeManager]::Wrap($Object, $Type, $db)
         }
         "FromInterface" {
-            [OleViewDotNet.Wrappers.COMWrapperFactory]::Wrap($Object, $Interface)
+            [OleViewDotNet.TypeManager.COMTypeManager]::Wrap($Object, $Interface)
         }
         "FromInterfaceInstance" {
-            [OleViewDotNet.Wrappers.COMWrapperFactory]::Wrap($Object, $InterfaceInstance)
+            [OleViewDotNet.TypeManager.COMTypeManager]::Wrap($Object, $InterfaceInstance)
         }
         "FromIpid" {
-            [OleViewDotNet.Wrappers.COMWrapperFactory]::Wrap($Object, $Ipid)
+            [OleViewDotNet.TypeManager.COMTypeManager]::Wrap($Object, $Ipid)
         }
     }
 }
@@ -104,7 +99,7 @@ function Unwrap-ComObject {
         [object]$Object
     )
 
-    [OleViewDotNet.Wrappers.COMWrapperFactory]::Unwrap($Object)
+    [OleViewDotNet.TypeManager.COMTypeManager]::Unwrap($Object)
 }
 
 <#
@@ -116,10 +111,8 @@ This cmdlet generates a callable wrapper for a COM interface and wraps the objec
 The object to wrap.
 .PARAMETER Iid
 The interface ID to base the wrapper on.
-.PARAMETER LoadType
-Specify to load interface type from proxy/typelib if available and not already loaded.
 .PARAMETER Database
-Specify with LoadType to indicate the database to get interface information from.
+Specify to indicate the database to get interface information from.
 .PARAMETER Type
 The existing interface type to wrap with.
 .PARAMETER Interface
@@ -132,8 +125,6 @@ function Get-ComObjectInterface {
         [object[]]$Object,
         [Parameter(Mandatory, Position = 1, ParameterSetName = "FromIid")]
         [Guid]$Iid,
-        [Parameter(ParameterSetName = "FromIid")]
-        [switch]$LoadType,
         [Parameter(ParameterSetName = "FromIid")]
         [OleViewDotNet.Database.COMRegistry]$Database,
         [Parameter(Mandatory, Position = 1, ParameterSetName = "FromType")]
@@ -149,7 +140,7 @@ function Get-ComObjectInterface {
             $o = Unwrap-ComObject $o
             switch($PSCmdlet.ParameterSetName) {
                 "FromIid" {
-                    Wrap-ComObject -Object $o -Iid $Iid -LoadType:$LoadType | Write-Output
+                    Wrap-ComObject -Object $o -Iid $Iid -Database $Database | Write-Output
                 }
                 "FromType" {
                     Wrap-ComObject -Object $o -Type $Type | Write-Output
@@ -161,6 +152,41 @@ function Get-ComObjectInterface {
                     Wrap-ComObject -Object $o -InterfaceInstance $InterfaceInstance | Write-Output
                 }
             }
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+Adds interface types from an assembly.
+.DESCRIPTION
+This cmdlet adds interface types from an assembly.
+.PARAMETER Assembly
+The assembly to load the types from.
+.PARAMETER Path
+The path to the assembly to load.
+.PARAMETER AutoLoad
+Copy the assembly to the cache and automatically load it next time.
+#>
+function Add-ComObjectInterface {
+    [CmdletBinding(DefaultParameterSetName="FromPath")]
+    Param(
+        [Parameter(Mandatory, Position = 0, ParameterSetName="FromPath")]
+        [string]$Path,
+        [Parameter(Mandatory, Position = 0, ValueFromPipeline, ParameterSetName="FromAssembly")]
+        [System.Reflection.Assembly]$Assembly,
+        [switch]$AutoLoad
+    )
+
+    PROCESS {
+        try {
+            if ($PSCmdlet -eq "FromAssembly") {
+                [OleViewDotNet.TypeManager.COMTypeManager]::LoadTypesFromAssembly($Assembly, $AutoLoad)
+            } else {
+                [OleViewDotNet.TypeManager.COMTypeManager]::LoadTypesFromAssembly($Path, $AutoLoad)
+            }
+        } catch {
+            Write-Error $_
         }
     }
 }
@@ -1220,7 +1246,7 @@ function Get-ComInterface {
         [switch]$TypeLib,
         [Parameter(Mandatory, ParameterSetName = "FromSource")]
         [OleViewDotNet.Database.COMRegistryEntrySource]$Source,
-        [Parameter(Mandatory, Position = 0, ParameterSetName="FromClass")]
+        [Parameter(Mandatory, ParameterSetName="FromClass")]
         [OleViewDotNet.Database.ICOMClassEntry]$Class,
         [Parameter(Mandatory, ParameterSetName="FromClsid")]
         [guid]$Clsid,
@@ -1608,7 +1634,7 @@ function Get-ComObjRef {
     PROCESS {
         switch($PSCmdlet.ParameterSetName) {
             "FromObject" {
-                [OleViewDotNet.Utilities.COMUtilities]::MarshalObjectToObjRef($Object, `
+                [OleViewDotNet.Marshaling.COMObjRef]::FromObject($Object, `
                         $Iid, $MarshalContext, $MarshalFlags) | Out-ObjRef -Output $Output
             }
             "FromPath" {
@@ -1769,25 +1795,33 @@ Specify the console session to create the object in.
 Don't wrap object in a callable wrapper.
 .PARAMETER Iid
 Specify the interface to query for initially.
-.PARAMETER LoadType
-Specify to load interface type from proxy/typelib if available and not already loaded.
 .PARAMETER Database
-Specify with LoadType to indicate the database to get interface information from.
+Specify to indicate the database to get interface information from.
 .PARAMETER Ipid
 Create the object from an existing IPID.
+.PARAMETER RuntimeClass
+The name of a Windows Runtime class to create.
+.PARAMETER InBroker
+Specify to create the runtime class in a broker.
+.PARAMETER PerUserBroker
+Specify to use a per-user broker.
+.PARAMETER Elevate
+Specify to elevate the class object.
 #>
 function New-ComObject {
     [CmdletBinding(DefaultParameterSetName="FromClass")]
     Param(
         [Parameter(Mandatory, Position = 0, ParameterSetName = "FromClass", ValueFromPipeline)]
         [Parameter(Mandatory, Position = 0, ParameterSetName = "FromSessionIdClass")]
+        [Parameter(Mandatory, Position = 0, ParameterSetName = "FromElevateClass")]
         [OleViewDotNet.Database.ICOMClassEntry]$Class,
         [Parameter(Mandatory, Position = 0, ParameterSetName = "FromFactory", ValueFromPipeline)]
-        [OleViewDotNet.Wrappers.IClassFactoryWrapper]$Factory,
+        [OleViewDotNetPS.Wrappers.IClassFactoryWrapper]$Factory,
         [Parameter(Mandatory, Position = 0, ParameterSetName = "FromActivationFactory")]
-        [OleViewDotNet.Wrappers.IActivationFactoryWrapper]$ActivationFactory,
+        [OleViewDotNetPS.Wrappers.IActivationFactoryWrapper]$ActivationFactory,
         [Parameter(Mandatory, ParameterSetName = "FromClsid")]
         [Parameter(Mandatory, ParameterSetName = "FromSessionIdClsid")]
+        [Parameter(Mandatory, ParameterSetName = "FromElevateClsid")]
         [Guid]$Clsid,
         [Parameter(ParameterSetName = "FromClsid")]
         [Parameter(ParameterSetName = "FromClass")]
@@ -1805,9 +1839,17 @@ function New-ComObject {
         [Parameter(Mandatory, ParameterSetName = "FromSessionIdClass")]
         [Parameter(Mandatory, ParameterSetName = "FromSessionIdClsid")]
         [int]$SessionId,
+        [Parameter(Mandatory, ParameterSetName = "FromElevateClass")]
+        [Parameter(Mandatory, ParameterSetName = "FromElevateClsid")]
+        [switch]$Elevate,
+        [Parameter(Mandatory, ParameterSetName = "FromRuntimeClass")]
+        [string]$RuntimeClass,
+        [Parameter(ParameterSetName = "FromRuntimeClass")]
+        [switch]$InBroker,
+        [Parameter(ParameterSetName = "FromRuntimeClass")]
+        [switch]$PerUserBroker,
         [switch]$NoWrapper,
         [Guid]$Iid = [guid]::Empty,
-        [switch]$LoadType,
         [OleViewDotNet.Database.COMRegistry]$Database
     )
 
@@ -1828,7 +1870,7 @@ function New-ComObject {
                     $Iid, $ClassContext, $RemoteServer, $AuthInfo)
             }
             "FromFactory" {
-                $obj = [OleViewDotNet.Utilities.COMUtilities]::CreateInstanceFromFactory($Factory, $Iid)
+                $obj = $Factory.CreateInstance($null, $Iid)
             }
             "FromActivationFactory" {
                 $obj = $ActivationFactory.ActivateInstance()
@@ -1845,13 +1887,22 @@ function New-ComObject {
             "FromSessionIdClsid" {
                 $obj = [OleViewDotNet.Utilities.COMUtilities]::CreateFromSessionMoniker($Clsid, $SessionId, $false)
             }
+            "FromElevateClass" {
+                $obj = [OleViewDotNet.Utilities.COMUtilities]::CreateFromElevationMoniker($Class.Clsid, $false)
+            }
+            "FromElevateClsid" {
+                $obj = [OleViewDotNet.Utilities.COMUtilities]::CreateFromElevationMoniker($Clsid, $false)
+            }
+            "FromRuntimeClass" {
+                $obj = [OleViewDotNet.Utilities.COMUtilities]::CreateRuntimeClass($RuntimeClass, $InBroker, $PerUserBroker)
+            }
         }
 
         if ($null -ne $obj) {
             if ($null -ne $Ipid -and !$iid_set) {
                 Wrap-ComObject $obj -Ipid $Ipid -NoWrapper:$NoWrapper | Write-Output
             } else {
-                Wrap-ComObject $obj -Iid $Iid -NoWrapper:$NoWrapper -LoadType:$LoadType -DataBase $DataBase | Write-Output
+                Wrap-ComObject $obj -Iid $Iid -NoWrapper:$NoWrapper -DataBase $DataBase | Write-Output
             }
         }
     }
@@ -1878,15 +1929,25 @@ Specify the console session to create the factory in.
 Don't wrap factory object in a callable wrapper.
 .PARAMETER Iid
 The IID to wrap for if not wanting to use a default type.
+.PARAMETER RuntimeClass
+The name of a Windows Runtime class to create.
+.PARAMETER InBroker
+Specify to create the runtime class in a broker.
+.PARAMETER PerUserBroker
+Specify to use a per-user broker.
+.PARAMETER Elevate
+Specify to elevate the class factory.
 #>
 function New-ComObjectFactory {
     [CmdletBinding(DefaultParameterSetName="FromClass")]
     Param(
         [Parameter(Mandatory, Position = 0, ParameterSetName = "FromClass", ValueFromPipeline)]
         [Parameter(Mandatory, Position = 0, ParameterSetName = "FromSessionIdClass")]
+        [Parameter(Mandatory, Position = 0, ParameterSetName = "FromElevateClass")]
         [OleViewDotNet.Database.ICOMClassEntry]$Class,
         [Parameter(Mandatory, Position = 0, ParameterSetName = "FromClsid")]
         [Parameter(Mandatory, Position = 0, ParameterSetName = "FromSessionIdClsid")]
+        [Parameter(Mandatory, Position = 0, ParameterSetName = "FromElevateClsid")]
         [Guid]$Clsid,
         [Parameter(ParameterSetName = "FromClsid")]
         [Parameter(ParameterSetName = "FromClass")]
@@ -1900,12 +1961,22 @@ function New-ComObjectFactory {
         [Parameter(Mandatory, ParameterSetName = "FromSessionIdClass")]
         [Parameter(Mandatory, ParameterSetName = "FromSessionIdClsid")]
         [int]$SessionId,
+        [Parameter(Mandatory, ParameterSetName = "FromElevateClass")]
+        [Parameter(Mandatory, ParameterSetName = "FromElevateClsid")]
+        [switch]$Elevate,
+        [Parameter(Mandatory, ParameterSetName = "FromRuntimeClass")]
+        [string]$RuntimeClass,
+        [Parameter(ParameterSetName = "FromRuntimeClass")]
+        [switch]$InBroker,
+        [Parameter(ParameterSetName = "FromRuntimeClass")]
+        [switch]$PerUserBroker,
         [switch]$NoWrapper,
         [guid]$Iid = [guid]::Empty
     )
 
     PROCESS {
         $obj = $null
+        $runtime_class = $false
         switch($PSCmdlet.ParameterSetName) {
             "FromClass" {
                 $obj = $Class.CreateClassFactory($ClassContext, $RemoteServer, $AuthInfo)
@@ -1920,11 +1991,21 @@ function New-ComObjectFactory {
             "FromSessionIdClsid" {
                 $obj = [OleViewDotNet.Utilities.COMUtilities]::CreateFromSessionMoniker($Clsid, $SessionId, $true)
             }
+            "FromRuntimeClass" {
+                $obj = [OleViewDotNet.Utilities.COMUtilities]::CreateActivationFactory($RuntimeClass, "00000000-0000-0000-C000-000000000046", $InBroker, $PerUserBroker)
+                $runtime_class = $true
+            }
+            "FromElevateClass" {
+                $obj = [OleViewDotNet.Utilities.COMUtilities]::CreateFromElevationMoniker($Class.Clsid, $true)
+            }
+            "FromElevateClsid" {
+                $obj = [OleViewDotNet.Utilities.COMUtilities]::CreateFromElevationMoniker($Clsid, $true)
+            }
         }
 
         if ($null -ne $obj) {
             if ($Iid -eq [guid]::Empty) {
-                $type = [OleViewDotNetPS.Utils.PowerShellUtils]::GetFactoryType($Class)
+                $type = [OleViewDotNetPS.Utils.PowerShellUtils]::GetFactoryType($Class, $runtime_class)
                 Wrap-ComObject $obj $type -NoWrapper:$NoWrapper
             } else {
                 Wrap-ComObject $obj -Iid $Iid -NoWrapper:$NoWrapper 
@@ -2421,16 +2502,9 @@ function Get-ComTypeLibAssembly {
     PROCESS {
         $callback = New-CallbackProgress -Activity "Converting TypeLib" -NoProgress:$NoProgress
         if ($PSCmdlet.ParameterSetName -eq "FromTypeLib") {
-            $Path = ""
-            if ([Environment]::Is64BitProcess) {
-                $Path = $TypeLib.Win64Path
-            }
-            if ($Path -eq "") {
-                $Path = $TypeLib.Win32Path
-            }
-        }
-        if ($Path -ne "") {
-            [OleViewDotNet.Utilities.COMUtilities]::LoadTypeLib($Path, $callback) | Write-Output
+            [OleViewDotNet.Utilities.COMTypeCache]::LoadTypeLib($TypeLib, $callback) | Write-Output
+        } else {
+            [OleViewDotNet.Utilities.COMTypeCache]::LoadTypeLib($Path, $callback) | Write-Output
         }
     }
 }
@@ -2527,6 +2601,9 @@ OleViewDotNet.TypeLib.Instance.COMTypeLibInstance
 .EXAMPLE
 Import-ComTypeLib -Path lib.tlb
 Import a type library.
+.EXAMPLE
+Import-ComTypeLib -Path lib.tlb -Parse
+Import a type library and parse it into an easier format.
 #>
 function Import-ComTypeLib {
     [CmdletBinding()]
@@ -2541,33 +2618,33 @@ function Import-ComTypeLib {
         [OleViewDotNet.Interop.COMVersion]$Version,
         [parameter(ParameterSetName = "FromRegistered")]
         [int]$LocaleId = 0,
-        [switch]$AsObject
+        [switch]$Parse
     )
 
     PROCESS {
         try {
-            switch($PSCmdlet.ParameterSetName) {
+            $type_lib = switch($PSCmdlet.ParameterSetName) {
                 "FromPath" {
-                    if ($AsObject) {
-                        [OleViewDotNet.TypeLib.Instance.COMTypeLibInstance]::FromFile($Path)
-                    } else {
-                        [OleViewDotNet.TypeLib.COMTypeLib]::FromFile($Path)
-                    }
+                    [OleViewDotNet.TypeLib.Instance.COMTypeLibInstance]::FromFile($Path)
                 }
                 "FromObject" {
-                    if ($AsObject) {
-                        [OleViewDotNet.TypeLib.Instance.COMTypeLibInstance]::FromObject($Object)
-                    } else {
-                        [OleViewDotNet.TypeLib.COMTypeLib]::FromObject($Object)
-                    }
+                    $Object = Unwrap-ComObject $Object
+                    [OleViewDotNet.TypeLib.Instance.COMTypeLibInstance]::FromObject($Object)
                 }
                 "FromRegistered" {
-                    if ($AsObject) {
-                        [OleViewDotNet.TypeLib.Instance.COMTypeLibInstance]::FromRegistered($TypeLibId, $Version, $LocaleId)
-                    } else {
-                        [OleViewDotNet.TypeLib.COMTypeLib]::FromRegistered($TypeLibId, $Version, $LocaleId)
-                    }
+                    [OleViewDotNet.TypeLib.Instance.COMTypeLibInstance]::FromRegistered($TypeLibId, $Version, $LocaleId)
                 }
+            }
+
+            if ($Parse) {
+                try {
+                    $type_lib.Parse()
+                } 
+                finally {
+                    $type_lib.Dispose()
+                }
+            } else {
+                $type_lib
             }
         } catch {
             Write-Error $_
@@ -3232,9 +3309,9 @@ function Get-ComProgId {
 
 <#
 .SYNOPSIS
-Converts a type library or proxy instance to a .NET assembly.
+Converts a type library to a .NET assembly.
 .DESCRIPTION
-This cmdlet converts a type library or proxy instance object to a .NET assembly. This assembly can then be used to 
+This cmdlet converts a type library to a .NET assembly. This assembly can then be used to 
 access COM interfaces. The assembly will be automatically registered with the applications so that you can use it with
 Get-ComObjectInterface.
 .PARAMETER TypeLib
@@ -3243,10 +3320,6 @@ The type library version entry to convert.
 The path to a type library to convert.
 .PARAMETER NoProgress
 Don't show progress during conversion.
-.PARAMETER Proxy
-The proxy instance to convert.
-.PARAMETER Ipid
-The IPID entry to convert. Must have been created with ParseStubMethods parameter.
 .INPUTS
 None
 .OUTPUTS
@@ -3259,12 +3332,6 @@ function ConvertTo-ComAssembly {
         [OleViewDotNet.Database.COMTypeLibVersionEntry]$TypeLib,
         [parameter(Mandatory, ParameterSetName = "FromPath", Position = 0)]
         [string]$Path,
-        [parameter(Mandatory, ParameterSetName = "FromProxy", Position = 0)]
-        [OleViewDotNet.Proxy.COMProxyFile]$Proxy,
-        [parameter(Mandatory, ParameterSetName = "FromProxyInterface", Position = 0)]
-        [OleViewDotNet.Proxy.COMProxyInterface]$ProxyInterface,
-        [parameter(Mandatory, ParameterSetName = "FromIpid", Position = 0)]
-        [OleViewDotNet.Processes.COMIPIDEntry]$Ipid,
         [switch]$NoProgress
     )
 
@@ -3276,15 +3343,6 @@ function ConvertTo-ComAssembly {
             }
             "FromPath" {
                 Get-ComTypeLibAssembly -Path $TypeLib -NoProgress:$NoProgress | Write-Output
-            }
-            "FromProxy" {
-                [OleViewDotNet.Utilities.COMUtilities]::ConvertProxyToAssembly($Proxy, $callback) | Write-Output
-            }
-            "FromProxyInterface" {
-                [OleViewDotNet.Utilities.COMUtilities]::ConvertProxyToAssembly($ProxyInterface, $callback) | Write-Output
-            }
-            "FromIpid" {
-                [OleViewDotNet.Utilities.COMUtilities]::ConvertProxyToAssembly($Ipid, $callback) | Write-Output
             }
         }
     }
@@ -3823,4 +3881,310 @@ function New-ComActivationProperties {
         }
     }
     $props
+}
+
+<#
+.SYNOPSIS
+Gets a COM proxy name information.
+.DESCRIPTION
+This cmdlet gets a COM proxy's names as an XML or JSON file so that you then can be edited.
+.PARAMETER Proxy
+The proxy get the names for.
+.PARAMETER AsObject
+Return the name information as an object.
+.PARAMETER Format
+Specify the output format of XML or JSON.
+.INPUTS
+None
+.OUTPUTS
+string
+OleViewDotNet.Proxy.Editor.COMProxyInterfaceNameData
+.EXAMPLE
+Get-ComProxyName $proxy
+Get COM proxy names as XML.
+.EXAMPLE
+Get-ComProxyName $proxy -Format Json
+Get COM proxy names as JSON.
+.EXAMPLE
+Get-ComProxyName $proxy -AsObject
+Get COM proxy names as an object.
+#>
+function Get-ComProxyName {
+    [CmdletBinding(DefaultParameterSetName="AsString")]
+    Param(
+        [parameter(Mandatory, Position=0)]
+        [OleViewDotNet.Proxy.COMProxyInterface]$Proxy,
+        [parameter(Mandatory, ParameterSetName = "AsObject")]
+        [switch]$AsObject,
+        [parameter(ParameterSetName = "AsString")]
+        [parameter(ParameterSetName = "ToFile")]
+        [OleViewDotNet.Proxy.Editor.COMProxyInterfaceNameDataExportFormat]$Format = "Xml"
+    )
+
+    switch($PSCmdlet.ParameterSetName) {
+        "AsString" {
+            $Proxy.GetNames().Export($Format)
+        }
+        "AsObject" {
+            $Proxy.GetNames()
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+Set a COM proxy name information.
+.DESCRIPTION
+This cmdlet sets a COM proxy's names from an XML/JSON file or object so that you then can be edited.
+.PARAMETER Proxy
+The proxy entry to set.
+.PARAMETER Name
+The proxy name information. Can be an object or an XML or JSON document string.
+.INPUTS
+None
+.OUTPUTS
+None
+.EXAMPLE
+Set-ComProxyName $proxy "<...>"
+Set COM proxy names from XML.
+.EXAMPLE
+Set-ComProxyName $proxy $name
+Set COM proxy names from an object.
+#>
+function Set-ComProxyName {
+    [CmdletBinding(DefaultParameterSetName="FromObject")]
+    Param(
+        [parameter(Mandatory, Position=0)]
+        [OleViewDotNet.Proxy.COMProxyInterface]$Proxy,
+        [parameter(Mandatory, Position=1, ParameterSetName = "FromObject")]
+        [OleViewDotNet.Proxy.Editor.COMProxyInterfaceNameData]$Name
+    )
+
+    $n = switch($PSCmdlet.ParameterSetName) {
+        "FromObject" {
+            $Name
+        }
+    }
+
+    $Proxy.UpdateNames($n)
+}
+
+<#
+.SYNOPSIS
+Exports a COM proxy's name information.
+.DESCRIPTION
+This cmdlet exports a COM proxy's names as an XML or JSON file so that you then can be edited.
+.PARAMETER Proxy
+The proxy get the names for.
+.PARAMETER Path
+The path to write to.
+.PARAMETER Format
+The format of the exported file.
+.INPUTS
+None
+.OUTPUTS
+None
+.EXAMPLE
+Export-ComProxyName $proxy -Path output.xml
+Export COM proxy names as XML.
+.EXAMPLE
+Export-ComProxyName $proxy -Format Json -Path output.json
+Export COM proxy names as JSON.
+#>
+function Export-ComProxyName {
+    [CmdletBinding(DefaultParameterSetName="ToFile")]
+    Param(
+        [parameter(Mandatory, Position=0)]
+        [OleViewDotNet.Proxy.COMProxyInterface]$Proxy,
+        [parameter(ParameterSetName = "ToFile")]
+        [string]$Path,
+        [parameter(ParameterSetName = "ToFile")]
+        [OleViewDotNet.Proxy.Editor.COMProxyInterfaceNameDataExportFormat]$Format = "Xml",
+        [parameter(ParameterSetName = "ToCache")]
+        [switch]$ToCache
+    )
+
+    switch($PSCmdlet.ParameterSetName) {
+        "ToFile" {
+            $Proxy.GetNames().Export($Format) | Set-Content -Path $Path
+        }
+        "ToCache" {
+            $Proxy.GetNames().SaveToCache()
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+Imports a COM proxy's name information.
+.DESCRIPTION
+This cmdlet import a COM proxy's names as an XML or JSON file so that you then can be edited.
+.PARAMETER Path
+The path to read from.
+.INPUTS
+None
+.OUTPUTS
+None
+.EXAMPLE
+Import-ComProxyName -Proxy $proxy -Path output.xml
+Import COM proxy names from XML.
+.EXAMPLE
+Import-ComProxyName $proxy -FromCache
+Import COM proxy names from cache.
+#>
+function Import-ComProxyName {
+    [CmdletBinding(DefaultParameterSetName="FromFile")]
+    Param(
+        [parameter(Mandatory, Position=0)]
+        [OleViewDotNet.Proxy.COMProxyInterface]$Proxy,
+        [parameter(ParameterSetName = "FromFile")]
+        [string]$Path,
+        [parameter(Mandatory, ParameterSetName = "FromCache")]
+        [switch]$FromCache
+    )
+
+    try
+    {
+        $names = switch($PSCmdlet.ParameterSetName) {
+            "FromFile" {
+                Get-Content -Path $Path | Out-String
+            }
+            "FromCache" {
+                [OleViewDotNet.Proxy.Editor.COMProxyInterfaceNameData]::LoadFromCache($Proxy.Iid)
+            }
+        }
+        Set-ComProxyName -Proxy $proxy -Name $names
+    }
+    catch
+    {
+        Write-Error $_
+    }
+}
+
+<#
+.SYNOPSIS
+Get a COM runtime type from an interface or class.
+.DESCRIPTION
+This cmdlet gets a COM runtime type from an interface or class.
+.PARAMETER InputObject
+The object to query.
+.INPUTS
+None
+.OUTPUTS
+System.Type
+.EXAMPLE
+Get-ComRuntimeType $intf
+Get the runtime type from an interface.
+#>
+function Get-ComRuntimeType {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory, Position=0, ValueFromPipeline)]
+        [OleViewDotNet.DataBase.ICOMRuntimeType]$InputObject
+    )
+
+    PROCESS {
+        if ($InputObject.HasRuntimeType) {
+            $InputObject.GetRuntimeType()
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+Edit a source code object.
+.DESCRIPTION
+This cmdlet allows you to edit a source code object such as a proxy.
+.PARAMETER Proxy
+The proxy to edit.
+.INPUTS
+None
+.OUTPUTS
+None
+.EXAMPLE
+Edit-ComSourceCode $proxy
+Edit a COM proxy.
+#>
+function Edit-ComSourceCode {
+    [CmdletBinding()]
+    Param(
+        [parameter(Mandatory, Position=0)]
+        [OleViewDotNet.Utilities.Format.ICOMSourceCodeEditable]$InputObject
+    )
+
+    $frm = [OleViewDotNet.Forms.EditSourceCodeForm]::new($InputObject)
+    $frm.ShowDialog() | Out-Null
+    $frm.Dispose()
+}
+
+<#
+.SYNOPSIS
+Get list of registered objects in the ROT.
+.DESCRIPTION
+This cmdlet gets the list of registered objects in the ROT.
+.PARAMETER TrustedOnly
+Only show trusted entries.
+.INPUTS
+None
+.OUTPUTS
+OleViewDotNet.Utilities.COMRunningObjectTableEntry[]
+.EXAMPLE
+Get-ComRunningObjectTable
+Get the list of registered objects in the ROT.
+#>
+function Get-ComRunningObjectTable {
+    Param(
+        [switch]$TrustedOnly
+    )
+
+    [OleViewDotNet.Utilities.COMRunningObjectTable]::EnumRunning($TrustedOnly) | Write-Output
+}
+
+<#
+.SYNOPSIS
+Get a COM running object.
+.DESCRIPTION
+This cmdlet gets a COM running object from a display name or entry.
+.PARAMETER Entry
+The entry to get the object from.
+.PARAMETER Name
+The name of the object.
+.PARAMETER TrustedOnly
+Only get from trusted list.
+.PARAMETER Iid
+Specify the wrapping IID.
+.PARAMETER NoWrapper
+Specify to return an unwrapped object.
+.INPUTS
+None
+.OUTPUTS
+object
+.EXAMPLE
+Get-ComRunnigObject -Name "clsid:ABC"
+Get the running object for a name.
+#>
+function Get-ComRunningObject {
+    [CmdletBinding(DefaultParameterSetName="FromName")]
+    Param(
+        [parameter(Mandatory, Position=0, ParameterSetName="FromName")]
+        [string]$Name,
+        [parameter(ParameterSetName="FromName")]
+        [switch]$TrustedOnly,
+        [parameter(Mandatory, Position=0, ValueFromPipeline, ParameterSetName="FromEntry")]
+        [OleViewDotNet.Utilities.COMRunningObjectTableEntry]$Entry,
+        [Guid]$Iid = "00000000-0000-0000-C000-000000000046",
+        [switch]$NoWrapper
+    )
+
+    PROCESS {
+        $obj = switch($PSCmdlet.ParameterSetName) {
+            "FromName" {
+                [OleViewDotNet.Utilities.COMRunningObjectTable]::GetObject($Name, $TrustedOnly)
+            }
+            "FromEntry" {
+                $Entry.GetObject()
+            }
+        }
+        Wrap-ComObject -Object $obj -Iid $Iid -NoWrapper:$NoWrapper
+    }
 }

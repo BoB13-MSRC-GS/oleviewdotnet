@@ -21,6 +21,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices.ComTypes;
+using Marshal = System.Runtime.InteropServices.Marshal;
 
 namespace OleViewDotNet.TypeLib.Instance;
 
@@ -34,6 +35,22 @@ public sealed class COMTypeInfoInstance : IDisposable
     private ITypeInfo2 GetTypeInfo2()
     {
         return m_type_info2 ?? throw new NotSupportedException("Method is not supported.");
+    }
+
+    private static IReadOnlyList<COMTypeCustomDataItem> GetAllCustData(Action<IntPtr> get_all_cust_data)
+    {
+        using var buffer = new SafeStructureInOutBuffer<CUSTDATA>();
+
+        get_all_cust_data(buffer.DangerousGetHandle());
+        try
+        {
+            var custdata = buffer.Result;
+            return custdata.prgCustData.ReadArray<CUSTDATAITEM>(custdata.cCustData).Select(i => new COMTypeCustomDataItem(i)).ToList().AsReadOnly();
+        }
+        finally
+        {
+            NativeMethods.ClearCustData(buffer.DangerousGetHandle());
+        }
     }
 
     internal COMTypeInfoInstance(ITypeInfo type_info)
@@ -155,6 +172,11 @@ public sealed class COMTypeInfoInstance : IDisposable
         return ppvObj;
     }
 
+    public object CreateInstance()
+    {
+        return CreateInstance(null, COMKnownGuids.IID_IUnknown);
+    }
+
     public string GetMops(int memid)
     {
         m_type_info.GetMops(memid, out string pBstrMops);
@@ -164,7 +186,7 @@ public sealed class COMTypeInfoInstance : IDisposable
     public COMTypeLibInstance GetContainingTypeLib(out int pIndex)
     {
         m_type_info.GetContainingTypeLib(out ITypeLib ppTLB, out pIndex);
-        return new(ppTLB);
+        return new(ppTLB, string.Empty);
     }
 
     public COMTypeLibInstance GetContainingTypeLib()
@@ -234,7 +256,6 @@ public sealed class COMTypeInfoInstance : IDisposable
 
     public void GetDocumentation2(int memid, out string pbstrHelpString, out int pdwHelpStringContext, out string pbstrHelpStringDll)
     {
-        // The definition of GetDocumentation2 seems to be wrong.
         GetTypeInfo2().GetDocumentation2(memid, out pbstrHelpString, out pdwHelpStringContext, out pbstrHelpStringDll);
     }
 
@@ -263,23 +284,18 @@ public sealed class COMTypeInfoInstance : IDisposable
         return GetAllCustData(p => GetTypeInfo2().GetAllImplTypeCustData(index, p));
     }
 
-    private static IReadOnlyList<COMTypeCustomDataItem> GetAllCustData(Action<IntPtr> get_all_cust_data)
+    public Type ToType()
     {
-        using var buffer = new SafeStructureInOutBuffer<CUSTDATA>();
-
-        get_all_cust_data(buffer.DangerousGetHandle());
-        try
-        {
-            var custdata = buffer.Result;
-            return custdata.prgCustData.ReadArray<CUSTDATAITEM>(custdata.cCustData).Select(i => new COMTypeCustomDataItem(i)).ToList().AsReadOnly();
-        }
-        finally
-        {
-            NativeMethods.ClearCustData(buffer.DangerousGetHandle());
-        }
+        using var handle = SafeComObjectHandle.FromObject(m_type_info, typeof(ITypeInfo).GUID);
+        return Marshal.GetTypeForITypeInfo(handle.DangerousGetHandle());
     }
 
-    void IDisposable.Dispose()
+    public COMTypeLibTypeInfo Parse()
+    {
+        return new COMTypeLibTypeInfoParser(new(), this).Parse();
+    }
+
+    public void Dispose()
     {
         foreach (var desc in m_var_desc.Values)
         {
@@ -292,7 +308,6 @@ public sealed class COMTypeInfoInstance : IDisposable
         }
         m_func_desc.Clear();
         m_type_info.ReleaseComObject();
-        m_type_info2?.ReleaseComObject();
     }
 }
 

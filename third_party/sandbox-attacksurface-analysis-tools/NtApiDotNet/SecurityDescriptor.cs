@@ -156,7 +156,7 @@ namespace NtApiDotNet
 
         private Ace FindSaclAce(AceType type, bool include_inherit_only)
         {
-                if (Sacl != null && !Sacl.NullAcl)
+            if (Sacl != null && !Sacl.NullAcl)
             {
                 return Sacl.FindAce(type, include_inherit_only);
             }

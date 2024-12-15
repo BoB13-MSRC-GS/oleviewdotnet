@@ -103,8 +103,8 @@ internal partial class TypeLibControl : UserControl
         }
         else
         {
-            if(removeIfEmpty)
-               tabControl.TabPages.Remove(tab_page);
+            if (removeIfEmpty)
+                tabControl.TabPages.Remove(tab_page);
         }
     }
 
@@ -162,7 +162,7 @@ internal partial class TypeLibControl : UserControl
     {
         bool showAll = textBoxFilter.Text.Length <= 0 || textBoxFilter.Text.Equals(filterDefaultString);
         var filteredInterfaces = m_interfaces;
-        if(!showAll)
+        if (!showAll)
         {
             filteredInterfaces = m_interfaces.Where(item =>
             {
@@ -191,7 +191,7 @@ internal partial class TypeLibControl : UserControl
 
     private string GetTextFromTag(object tag)
     {
-        m_builder.Reset();
+        m_builder.Clear();
         if (tag is ICOMSourceCodeFormattable formattable)
         {
             formattable.Format(m_builder);
@@ -272,7 +272,7 @@ internal partial class TypeLibControl : UserControl
     private void btnExportInterfaces_Click(object sender, EventArgs e)
     {
         StringBuilder sb = new();
-        foreach(var listView in new ListView[] { listViewEnums, listViewStructures, listViewClasses, listViewInterfaces })
+        foreach (var listView in new ListView[] { listViewEnums, listViewStructures, listViewClasses, listViewInterfaces })
         {
             foreach (ListViewItem item in listView.Items)
             {

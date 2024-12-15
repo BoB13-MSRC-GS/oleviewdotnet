@@ -45,16 +45,6 @@ public static class ProgramSettings
         public bool ParseStubMethods { get; set; }
         [DataMember]
         public bool ResolveMethodNames { get; set; }
-        /**/
-        [DataMember]
-        public bool ResolveMethodNamesFromIDA { get; set; }
-        [DataMember]
-        public bool ResolveMethodNamesFromIDAHard { get; set; }
-        [DataMember]
-        public bool ResolveMethodDllFix {get; set;}
-        [DataMember]
-        public String FixedDll { get; set; }
-        /**/
         [DataMember]
         public bool ParseRegisteredClasses { get; set; }
         [DataMember]
@@ -65,6 +55,19 @@ public static class ProgramSettings
         public bool AlwaysShowSourceCode { get; set; }
         [DataMember]
         public bool EnableAutoParsing { get; set; }
+        [DataMember]
+        public bool SaveProxyNamesOnExit { get; set; }
+
+        /* Added */
+        [DataMember]
+        public bool ResolveMethodNamesFromIDA { get; set; }
+        [DataMember]
+        public bool ResolveMethodNamesFromIDAHard { get; set; }
+        [DataMember]
+        public bool ResolveMethodDllFix { get; set; }
+        [DataMember]
+        public String FixedDll { get; set; }
+        /* Added */
 
         public static ConfigFile Load()
         {
@@ -187,17 +190,26 @@ public static class ProgramSettings
         set => _config.Value.ParseActivationContext = value;
     }
 
-    /**/
-    public static bool ResolveMethodNamesFromIDA {
+    /* Added */
+    // This setting is for ResolveMethod.
+    public static bool ResolveMethodNamesFromIDA
+    {
         get => _config.Value.ResolveMethodNamesFromIDA;
-        set => _config.Value.ResolveMethodNamesFromIDA = value; 
+        set => _config.Value.ResolveMethodNamesFromIDA = value;
     }
-    public static bool ResolveMethodNamesFromIDAHard {
+
+    // This setting is for ResolveMethod(Hard).
+    // If this setting is enabled, oleviewdotnet will get imported DLL/EXE list from service process and analyze all.
+    public static bool ResolveMethodNamesFromIDAHard
+    {
         get => _config.Value.ResolveMethodNamesFromIDAHard;
         set => _config.Value.ResolveMethodNamesFromIDAHard = value;
     }
 
-    public static bool ResolveMethodDllFix {
+    // This setting is for ResolveMethod(Fixed).
+    // If this setting is enabled, oleviewdotnet will analyze fixed DLL/EXE only.
+    public static bool ResolveMethodDllFix
+    {
         get => _config.Value.ResolveMethodDllFix;
         set => _config.Value.ResolveMethodDllFix = value;
     }
@@ -207,8 +219,7 @@ public static class ProgramSettings
         get => _config.Value.FixedDll;
         set => _config.Value.FixedDll = value;
     }
-
-    /**/
+    /* Added */
 
     public static bool AlwaysShowSourceCode
     {
@@ -222,6 +233,12 @@ public static class ProgramSettings
         set => _config.Value.EnableAutoParsing = value;
     }
 
+    public static bool SaveProxyNamesOnExit
+    {
+        get => _config.Value.SaveProxyNamesOnExit;
+        set => _config.Value.SaveProxyNamesOnExit = value;
+    }
+
     public static void Save()
     {
         _config.Value.Save();
@@ -229,13 +246,18 @@ public static class ProgramSettings
 
     public static string GetAppDataDirectory()
     {
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), 
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "OleViewDotNet", AppUtilities.CurrentArchitecture.ToString());
     }
 
     public static string GetTypeLibDirectory()
     {
         return Path.Combine(GetAppDataDirectory(), "typelib");
+    }
+
+    public static string GetProxyDirectory()
+    {
+        return Path.Combine(GetAppDataDirectory(), "proxy");
     }
 
     public static string GetDefaultDatabasePath(bool create_directory)

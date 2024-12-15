@@ -14,20 +14,24 @@
 //    You should have received a copy of the GNU General Public License
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
-using Microsoft.Win32;
-using NtApiDotNet;
+using ICSharpCode.TextEditor.Document;
+using NtApiDotNet.Ndr;
 using OleViewDotNet.Database;
 using OleViewDotNet.Utilities.Format;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.ComponentModel;
 using System.IO;
-using System.ServiceProcess;
 using System.Windows.Forms;
-using System.Management;
+
+/* Added */
+using Microsoft.Win32;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Reflection;
-using System.Linq;
+using System.ServiceProcess;
+using System.Threading;
+using System.Threading.Tasks;
+/* Added */
 
 namespace OleViewDotNet.Forms;
 
@@ -36,13 +40,25 @@ internal partial class SourceCodeViewerControl : UserControl
     private COMRegistry m_registry;
     private object m_selected_obj;
     private ICOMSourceCodeFormattable m_formattable_obj;
-    private ICOMSourceCodeEditable m_editable_obj;
     private COMSourceCodeBuilderType m_output_type;
     private bool m_hide_comments;
     private bool m_interfaces_only;
     private bool m_hide_parsing_options;
+
+    /* Added */
     public bool m_isReally = true;
-    public bool m_success = true;
+    /* Added */
+
+    private class NdrTextMarker : TextMarker
+    {
+        public INdrNamedObject Tag { get; }
+
+        public NdrTextMarker(int offset, int length, TextMarkerType textMarkerType, INdrNamedObject tag)
+            : base(offset, length, textMarkerType)
+        {
+            Tag = tag;
+        }
+    }
 
     public SourceCodeViewerControl()
     {
@@ -55,14 +71,27 @@ internal partial class SourceCodeViewerControl : UserControl
         toolStripMenuItemInterfacesOnly.Checked = true;
         toolStripMenuItemIDLOutputType.Checked = true;
         m_output_type = COMSourceCodeBuilderType.Idl;
-        SetText(string.Empty);
+        SetText(string.Empty, Array.Empty<NdrFormatterNameTag>());
     }
 
+    private void SetText(string text, IEnumerable<NdrFormatterNameTag> tags)
+    {
+        textEditor.Text = text.TrimEnd();
+        foreach (var tag in tags)
+        {
+            textEditor.Document.MarkerStrategy.AddMarker(new NdrTextMarker(tag.Offset, tag.Length, TextMarkerType.Underlined, tag.Entry));
+        }
+        textEditor.Refresh();
+    }
+
+    /* Added */
+    // This is for SetText without texteditor's tag. (from oleviewdotnet v1.14)
     private void SetText(string text)
     {
         textEditor.Text = text.TrimEnd();
         textEditor.Refresh();
     }
+    /* Added */
 
     internal void SetRegistry(COMRegistry registry)
     {
@@ -90,12 +119,14 @@ internal partial class SourceCodeViewerControl : UserControl
         }
     }
 
-    [DllImport("kernel32.dll")]
-    public static extern bool AllocConsole();
+    /* Added */
+    ResolvingForm resolvingForm = null;
 
-    /* KWAKMU18 ADDED 20240905 - Change Return Type */
+    /* Added */
+
+
+    //internal void Format()
     internal String Format()
-    /* KWAKMU18 ADDED 20240905 - Change Return Type */
     {
         COMSourceCodeBuilder builder = new(m_registry)
         {
@@ -113,328 +144,190 @@ internal partial class SourceCodeViewerControl : UserControl
             builder.AppendLine(m_selected_obj is null ?
                 "No formattable object selected"
                 : $"'{m_selected_obj}' is not formattable.");
-            SetText(builder.ToString());
+            SetText(builder.ToString(), builder.Tags);
             return builder.ToString();
         }
-        if (//builder.ToString().StartsWith("struct") ||
-            //builder.ToString().StartsWith("\nstruct") || builder.ToString().StartsWith("[switch_type") ||
-            //builder.ToString().StartsWith("\nunion") || builder.ToString().StartsWith("union") ||
-            builder.ToString().StartsWith("ERROR:") ||
+        /* Added */
+
+        // below code is for ResolveMethod.
+        if (ResolveMethod.banList == null) ResolveMethod.BanListInit();
+
+        if (builder.ToString().StartsWith("ERROR:") ||
             builder.ToString().Split('\n')[0].StartsWith("struct") || builder.ToString().Split('\n')[1].StartsWith("struct") ||
             builder.ToString().Split('\n')[0].StartsWith("union") || builder.ToString().Split('\n')[1].StartsWith("union") ||
             builder.ToString().Split('\n')[0].StartsWith("[switch_type") || builder.ToString().Split('\n')[1].StartsWith("[switch_type") ||
-            builder.ToString().Split('\n')[0].Contains("needs to be parsed")
-            )
+            builder.ToString().Split('\n')[0].Contains("needs to be parsed"))
         {
-            SetText(builder.ToString());
+            SetText(builder.ToString(), builder.Tags);
             return builder.ToString();
         }
 
-        //if (!builder.ToString().Contains("IUnknown {"))
-        //{
-        //    String result = "// Inheritanced class is not supported yet.\n"+builder.ToString();
-        //    SetText(result);
-        //    return result;
-        //}
-
-        AllocConsole();
-        if (!m_isReally ||
-            (!ProgramSettings.ResolveMethodNamesFromIDA && !ProgramSettings.ResolveMethodNamesFromIDAHard) ||
-            builder.ToString().Contains("oleautomation") || 
+        if (!m_isReally || (!ProgramSettings.ResolveMethodNamesFromIDA && !ProgramSettings.ResolveMethodNamesFromIDAHard) ||
             GetIid() == "00000001-0000-0000-C000-000000000046")
         {
-            SetText(builder.ToString());
+            SetText(builder.ToString(), builder.Tags);
             return builder.ToString();
         }
-        if (!Directory.Exists("interfaces\\idls")) Directory.CreateDirectory("interfaces\\idls");
 
-        String fileName = "interfaces\\idls\\";
         String resultIDL = "";
-        String serviceName = GetServiceName();
-        String binaryPath = null;
+
+        List<String> binaryPath = new List<string>();
+
         if (ProgramSettings.ResolveMethodDllFix)
         {
-            binaryPath = ProgramSettings.FixedDll;
+            binaryPath.Add(ProgramSettings.FixedDll);
         }
         else
         {
-            if (serviceName != null) binaryPath = ResolveMethod.GetBinaryPath(serviceName);
-            else
+            String serviceName = GetServiceName();
+            if (serviceName == null)
             {
-                SetText(builder.ToString());
-                return builder.ToString();
+                resultIDL = "// Resolve Failed. Failed to get service name.\n" + builder.ToString();
+                SetText(resultIDL);
+                return resultIDL;
             }
+            String binary = ResolveMethod.GetBinaryPath(serviceName);
+            if (binary == null)
+            {
+                resultIDL = "// Resolve Failed. Failed to get binary path.\n" + builder.ToString();
+                SetText(resultIDL);
+                return resultIDL;
+            }
+            binaryPath.Add(binary);
         }
+        resultIDL = Resolve(builder.ToString(), binaryPath);
 
-        m_success = true;
-        List<List<String>> methods = Resolve(builder.ToString(), binaryPath);
-
-        if (methods == null)
+        if (resultIDL == null)
         {
-            resultIDL += "// Resolve Failed.";
-            resultIDL += builder.ToString();
-            SetText(resultIDL);
-            return resultIDL;
-        }
-
-        if (methods.Count == 0)
-        {
+            binaryPath.Clear();
             if (ProgramSettings.ResolveMethodNamesFromIDAHard)
             {
-                resultIDL += ResolveHard(builder.ToString());
-            }
-            else
-            {
-                resultIDL += $"// {binaryPath}\n// Resolve Failed.\n";
-                resultIDL += builder.ToString();
+
+                String serviceName = GetServiceName();
+                if (serviceName == null)
+                {
+                    resultIDL = "// Resolve Failed. Failed to get service name.\n" + builder.ToString();
+                    SetText(resultIDL);
+                    return resultIDL;
+                }
+                int pid = GetServicePid(serviceName);
+                if (pid == -1)
+                {
+                    resultIDL = "// Resolve Hard Failed. Failed to find service pid.\n" + builder.ToString();
+                    SetText(resultIDL);
+                    return resultIDL;
+                }
+
+                Process process = Process.GetProcessById(pid);
+                if (process == null)
+                {
+                    MessageBox.Show("process is null?");
+                    return builder.ToString();
+                }
+                try
+                {
+                    for (int i = 0; i < process.Modules.Count; i++)
+                    {
+                        bool flag = true;
+                        for (int j = 0; j < ResolveMethod.banList.Count; j++)
+                        {
+                            if (Path.GetFileName(ResolveMethod.banList[j]).ToLower()
+                                == Path.GetFileName(process.Modules[i].FileName).ToLower())
+                            {
+                                flag = false;
+                                break;
+                            }
+                        }
+                        if (flag) binaryPath.Add(process.Modules[i].FileName);
+                    }
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    resultIDL = "// Resolve Hard Failed. Access Denied.\n" + builder.ToString();
+                    SetText(resultIDL);
+                    return resultIDL;
+                }
+                resultIDL = Resolve(builder.ToString(), binaryPath);
             }
         }
-        else
+
+        if (resultIDL == null)
         {
-            resultIDL += $"// {binaryPath}\n";
-            for (int i = 0; i < methods.Count; i++)
-            {
-                resultIDL += $"// Candidate {i + 1}\n";
-                resultIDL += ResolveMethod.ConvertMethodName(builder.ToString(), methods[i]);
-            }
+            resultIDL = $"// Resolve Failed.\n";
+            resultIDL += builder.ToString();
         }
 
         SetText(resultIDL);
-
-        //popup.Close();
-
-        //String content;
-        //using (StreamWriter writer = new StreamWriter(fileName + "before.interface"))
-        //{
-        //    content = builder.ToString().TrimEnd('\n');
-        //    content = content.TrimEnd('\n');
-        //    writer.Write(content);
-        //}
-        //Form popup = new Form();
-        //popup.Text = "Please Wait...";
-        //popup.StartPosition = FormStartPosition.CenterScreen;
-        //popup.Width = 300;
-        //popup.Height = 150;
-
-        //Label label = new Label();
-        //label.Text = "Resolving Methods...";
-        //label.Dock = DockStyle.Fill;
-        //label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-        //popup.Controls.Add(label);
-
-        //popup.Show();
-        //Process process = new Process();
-        //process.StartInfo.FileName = "method.exe";
-        //process.StartInfo.CreateNoWindow = true;
-        //process.StartInfo.Verb = "runas";
-        //process.StartInfo.UseShellExecute = true;
-        ////process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-        //try
-        //{
-        //    process.Start();
-        //    process.WaitForExit();
-        //}
-        //catch
-        //{
-        //    popup.Close();
-        //    MessageBox.Show("Failed to resolve interfaces.");
-        //    SetText(builder.ToString());
-        //    return builder.ToString();
-        //}
-        //popup.Close();
-        //int exitCode = process.ExitCode;
-        //if (exitCode != 0)
-        //{
-        //    SetText(builder.ToString());
-        //    return builder.ToString();
-        //}
-        //process.Dispose();
-        //using (StreamReader reader = new StreamReader(fileName + "after.interface"))
-        //{
-        //    content = reader.ReadToEnd();
-        //}
-        //SetText(content);
-        //return content;
-        //SetText(builder.ToString());
-        return builder.ToString();
+        return resultIDL;
     }
 
-    /**/
-
-    internal String ResolveHard(String idl)
+    /* Added */
+    // Finds method name with ResolveMethod, changes method name from Proc{n} to real method name and returns it.
+    internal String Resolve(String idl, List<String> binaryPath)
     {
-        List<List<List<String>>> candidates = new List<List<List<string>>>();
+        resolvingForm = new ResolvingForm(binaryPath);
+        Thread uiThread = new Thread(StartResolvingForm);
+        uiThread.Start();
+        
+        List<List<List<String>>> candidates = new List<List<List<String>>>();
         String resultIDL = "";
-        int pid = GetServicePid(GetServiceName());
-        if (pid == -1) return idl;
-        Form popup = null;
-        Process process = Process.GetProcessById(pid);
-        popup = new Form();
-        popup.Text = "Please Wait...";
-        popup.StartPosition = FormStartPosition.CenterScreen;
-        popup.Width = 300;
-        popup.Height = 150;
 
-        Label label = new Label();
-        label.Text = "Resolving Start.";
-        //label.Dock = DockStyle.Fill;
-        label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-        label.Size = new System.Drawing.Size(280, 30);
-        label.Location = new System.Drawing.Point(10, 10);
-        popup.Controls.Add(label);
-
-        ProgressBar progressBar = new ProgressBar();
-        progressBar.Minimum = 0;   // 최소값
-        progressBar.Maximum = 100; // 최대값
-        progressBar.Value = 0;     // 초기값
-        //progressBar.Width = 200;   // 너비
-        //progressBar.Height = 30;   // 높이
-        try
+        for (int i = 0; i < binaryPath.Count; i++)
         {
-            progressBar.Step = 100 / process.Modules.Count;      // 한 번에 증가할 값
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            resultIDL += "// Fail to Resolve Hard. Access Denied.\n";
-            resultIDL += idl;
-            return resultIDL;
-        }
-        progressBar.Size = new System.Drawing.Size(260, 30);
-        progressBar.Location = new System.Drawing.Point(10, 80);
-
-        popup.Controls.Add(progressBar);
-        popup.Show();
-        for (int i=0;i<process.Modules.Count;i++)
-        {
-            label.Text = $"Trying to resolve from {process.Modules[i].FileName}";
-            label.Update();
-            progressBar.PerformStep();
-            progressBar.Update();
-            bool flag = true;
-            if (ResolveMethod.banList == null && File.Exists("BanList"))
+            if (i < binaryPath.Count && resolvingForm.resolveDone)
             {
-                ResolveMethod.banList = new List<string>();
-                using (StreamReader reader = new StreamReader("BanList"))
+                return null;
+            }
+            resolvingForm.Update($"Trying to resolve from {Path.GetFileName(binaryPath[i])} ({i+1}/{binaryPath.Count})", $"Generating ASM File...");
+            if (!ResolveMethod.GenerateAsmFile(binaryPath[i]))
+            {
+                resolvingForm.Update(null, null);
+                resolvingForm.Update(null, null);
+                Application.DoEvents();
+                continue;
+            }
+
+            resolvingForm.Update(null, $"Searching VTables...");
+            Application.DoEvents();
+
+            List<List<String>> methods = ResolveMethod.GetMethodsFromIDA(binaryPath[i], idl);
+            List<List<String>> methods2 = ResolveMethod.GetMethodsFromCandidates(binaryPath[i], idl);
+            foreach (List<String> method in methods2) methods.Add(method);
+
+            resolvingForm.Update(null, $"Converting Method Names...");
+            Application.DoEvents();
+
+            if (methods.Count > 0)
+            {
+                candidates.Add(methods);
+                resultIDL += $"// {binaryPath[i]}\n";
+                for (int j = 0; j < methods.Count; j++)
                 {
-                    while (true)
-                    {
-                        String nowLine = reader.ReadLine();
-                        if (nowLine == null) break;
-                        ResolveMethod.banList.Add(nowLine);
-                    }
+                    resultIDL += $"// Candidates {j + 1}\n";
+                    resultIDL += ResolveMethod.ConvertMethodName(idl, methods[j]);
                 }
             }
-            else if (!File.Exists("BanList")) File.Create("BanList").Close();
-            for(int j=0;j<ResolveMethod.banList.Count;j++)
-            {
-                if (ResolveMethod.banList[j].ToLower() == process.Modules[i].FileName.ToLower())
-                {
-                    flag = false;
-                    break;
-                }
-            }
-            if (flag)
-            {
-                List<List<String>> methods = Resolve(idl, process.Modules[i].FileName, false);
-                if (methods.Count > 0)
-                {
-                    candidates.Add(methods);
-                    resultIDL += $"// {process.Modules[i].FileName}\n";
-                    for (int j = 0; j < methods.Count; j++)
-                    {
-                        resultIDL += $"// Candidates {j + 1}\n";
-                        resultIDL += ResolveMethod.ConvertMethodName(idl, methods[j]);
-                    }
-                }
-            }
-                
+            
         }
-
-        popup.Close();
+        resolvingForm.Close();
 
         if (candidates.Count == 0)
         {
-            resultIDL += "// Resolve Failed.\n";
-            resultIDL += idl;
+            resultIDL = null;
         }
         return resultIDL;
     }
-    internal List<List<String>> Resolve(String idl, String binaryPath, bool showPopup = true)
+
+    // For UI thread.
+    internal void StartResolvingForm()
     {
-        Form popup = null;
-        Label label = null;
-        if (!ProgramSettings.ResolveMethodNamesFromIDAHard && showPopup)
-        {
-            popup = new Form();
-            popup.Text = "Please Wait...";
-            popup.StartPosition = FormStartPosition.CenterScreen;
-            popup.Width = 300;
-            popup.Height = 150;
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
 
-            label = new Label();
-            label.Text = "Generating ASM File...";
-            label.Dock = DockStyle.Fill;
-            label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            popup.Controls.Add(label);
-
-            popup.Show();
-        }
-
-        if (!ResolveMethod.GenerateAsmFile(binaryPath))
-        {
-            popup.Close();
-            return null;
-        }
-
-        String interfaceName = ResolveMethod.GetInterfaceName(idl);
-        Console.WriteLine(interfaceName);
-
-        if (!ProgramSettings.ResolveMethodNamesFromIDAHard && showPopup)
-        {
-            label.Text = "Parsing Methods...";
-            label.Update();
-        }
-
-        List<List<String>> methods = ResolveMethod.GetMethodsFromIDA(binaryPath, idl);
-        String resultIDL = "";
-
-        //if (methods.Count == 0)
-        //{
-        //    Console.WriteLine("GetMethodsFromIDA() Failed. Get Candidates...");
-        List<List<String>> methods2 = ResolveMethod.GetMethodsFromCandidates(binaryPath, idl);
-        //}
-        if (!ProgramSettings.ResolveMethodNamesFromIDAHard && showPopup)
-        {
-            label.Text = "Resolving Methods...";
-            label.Update();
-            popup.Close();
-        }
-        foreach (List<String> method in methods2) methods.Add(method);
-        return methods;
-
-        for (int i = 0; i < methods.Count; i++)
-        {
-            resultIDL += $"// Candidate {i + 1}\n";
-            resultIDL += ResolveMethod.ConvertMethodName(idl, methods[i]);
-        }
-
-        //foreach (List<String> method in methods)
-        //{
-        //    foreach (String m in method) Console.Write(m);
-        //    Console.WriteLine();
-        //    ResolveMethod.ConvertMethodName(idl, method);
-        //}
-
-        //if (methods.Count == 0)
-        //{
-        //    m_success = false;
-        //    if (!ProgramSettings.ResolveMethodNamesFromIDAHard) resultIDL += "// Resolve Failed.\n" + idl;
-        //}
-        //if (!ProgramSettings.ResolveMethodNamesFromIDAHard) popup.Close();
-
-        //return resultIDL;
+        Application.Run(resolvingForm);
     }
 
+    // Get iid from interface idl.
     internal String GetIid()
     {
         COMSourceCodeBuilder builder = new(m_registry)
@@ -454,9 +347,10 @@ internal partial class SourceCodeViewerControl : UserControl
         }
 
         String now = builder.ToString();
-        if (now[0] == '[') {
+        if (now[0] == '[')
+        {
             String[] nows = now.Split('\n');
-            for(int i=0;i<nows.Length;i++)
+            for (int i = 0; i < nows.Length; i++)
             {
                 if (nows[i].Contains("uuid"))
                 {
@@ -467,12 +361,11 @@ internal partial class SourceCodeViewerControl : UserControl
         else
         {
             return now.Split('\"')[1];
-            String[] nows = now.Split('\n');
-            return nows[0].Split('(')[2].Trim('"');
         }
         return null;
     }
 
+    // Get iid by GetIid method and get service name from Registry.(HKEY_CLASSES_ROOT\CLSID)
     internal String GetServiceName()
     {
         string clsid = null;
@@ -493,7 +386,6 @@ internal partial class SourceCodeViewerControl : UserControl
             {
                 if (key != null)
                 {
-                    // AppID 값 읽기
                     object appIdValue = key.GetValue("AppID");
                     if (appIdValue != null)
                     {
@@ -505,7 +397,6 @@ internal partial class SourceCodeViewerControl : UserControl
         }
         catch (Exception ex)
         {
-            // 예외 처리
             Console.WriteLine($"GetServiceName(1): {ex.Message}");
             return null;
         }
@@ -518,7 +409,6 @@ internal partial class SourceCodeViewerControl : UserControl
             {
                 if (key != null)
                 {
-                    // AppID 값 읽기
                     object serviceName = key.GetValue("LocalService");
                     if (serviceName != null)
                     {
@@ -530,13 +420,13 @@ internal partial class SourceCodeViewerControl : UserControl
         }
         catch (Exception ex)
         {
-            // 예외 처리
             Console.WriteLine($"GetServiceName(2): {ex.Message}");
             return null;
         }
         return null;
     }
 
+    // Find pid of service.
     internal int GetServicePid(String serviceName)
     {
 
@@ -573,7 +463,7 @@ internal partial class SourceCodeViewerControl : UserControl
         return -1;
     }
 
-    /**/
+    /* Added */
 
     internal object SelectedObject
     {
@@ -594,17 +484,20 @@ internal partial class SourceCodeViewerControl : UserControl
                 m_formattable_obj = null;
             }
 
-            m_editable_obj = value as ICOMSourceCodeEditable;
-
             if (!IsParsed(m_formattable_obj) && AutoParse)
             {
                 ParseSourceCode();
             }
 
             parseSourceCodeToolStripMenuItem.Enabled = m_formattable_obj is not null && !IsParsed(m_formattable_obj);
-            editNamesToolStripMenuItem.Enabled = m_editable_obj is not null;
             Format();
         }
+    }
+
+    internal bool InterfacesOnly
+    {
+        get => m_interfaces_only;
+        set => m_interfaces_only = value;
     }
 
     private void OnHideParsingOptionsChanged()
@@ -717,15 +610,48 @@ internal partial class SourceCodeViewerControl : UserControl
         }
     }
 
-    private void editNamesToolStripMenuItem_Click(object sender, EventArgs e)
+    private NdrTextMarker GetTagAtCaret()
     {
-        if (m_editable_obj is not null)
+        var tags = textEditor.Document.MarkerStrategy.GetMarkers(textEditor.ActiveTextAreaControl.Caret.Position);
+        if (tags.Count > 0)
         {
-            using var form = new SourceCodeNameEditor(m_editable_obj);
-            if (form.ShowDialog() == DialogResult.OK)
+            return (NdrTextMarker)tags[0];
+        }
+        return null;
+    }
+
+    private void contextMenuStrip_Opening(object sender, CancelEventArgs e)
+    {
+        editNameToolStripMenuItem.Enabled = GetTagAtCaret() is not null;
+    }
+
+    private void editNameToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        NdrTextMarker tag = GetTagAtCaret();
+        if (tag is null)
+        {
+            return;
+        }
+
+        using GetTextForm frm = new(tag.Tag.Name);
+        frm.Text = "Edit Proxy Name";
+        if (frm.ShowDialog(this) == DialogResult.OK)
+        {
+            tag.Tag.Name = frm.Data;
+            textEditor.Document.ReadOnly = false;
+            textEditor.Document.Replace(tag.Offset, tag.Length, frm.Data);
+            textEditor.Document.MarkerStrategy.AddMarker(new NdrTextMarker(tag.Offset, frm.Data.Length, TextMarkerType.Underlined, tag.Tag));
+            textEditor.Document.ReadOnly = true;
+            textEditor.Refresh();
+            if (m_selected_obj is ICOMSourceCodeEditable editable)
             {
-                Format();
+                editable.Update();
             }
         }
+    }
+
+    private void refreshToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        Format();
     }
 }

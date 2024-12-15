@@ -17,18 +17,17 @@
 using System.Collections.Generic;
 using System.Runtime.InteropServices.ComTypes;
 using OleViewDotNet.TypeLib.Instance;
-using OleViewDotNet.TypeLib.Parser;
 
 namespace OleViewDotNet.TypeLib;
 
 public abstract class COMTypeLibComplexType : COMTypeLibTypeInfo
 {
-    internal COMTypeLibComplexType(COMTypeDocumentation doc, TYPEATTR attr)
-       : base(doc, attr)
+    internal COMTypeLibComplexType(COMTypeDocumentation doc, TYPEATTR attr, IEnumerable<COMTypeCustomDataItem> custom_data)
+       : base(doc, attr, custom_data)
     {
     }
 
-    private protected override void OnParse(COMTypeLibParser.TypeInfo type_info, TYPEATTR attr)
+    private protected override void OnParse(COMTypeLibTypeInfoParser type_info, TYPEATTR attr)
     {
         List<COMTypeLibVariable> fields = new();
         for (int i = 0; i < attr.cVars; ++i)

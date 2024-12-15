@@ -42,6 +42,7 @@ namespace NtApiDotNet.Win32.Rpc
         private readonly string _source_path;
         private readonly RpcClientBuilderArguments _args;
         private readonly HashSet<string> _proc_names;
+        private readonly bool _complex_types_only;
 
         private bool HasFlag(RpcClientBuilderFlags flag)
         {
@@ -380,6 +381,10 @@ namespace NtApiDotNet.Win32.Rpc
                 case NdrKnownTypes.HSTRING:
                     return new RpcTypeDescriptor(typeof(string), nameof(NdrUnmarshalBuffer.ReadHString),
                         nameof(NdrMarshalBuffer.WriteHString), known_type, RpcPointerType.Unique);
+                case NdrKnownTypes.HWND:
+                case NdrKnownTypes.HMENU:
+                    return new RpcTypeDescriptor(typeof(NdrWindowHandle), nameof(NdrUnmarshalBuffer.ReadStruct), marshal_helper,
+                        nameof(NdrMarshalBuffer.WriteStruct), known_type, null, null, new AdditionalArguments(true), new AdditionalArguments(true), RpcPointerType.Unique);
             }
             // TODO: Implement remaining custom marshallers?
             return null;
@@ -453,6 +458,27 @@ namespace NtApiDotNet.Win32.Rpc
                 pipe_type, null, null, args, args);
         }
 
+        private RpcTypeDescriptor GetInterfacePointerTypeDescriptor(NdrInterfacePointerTypeReference type, MarshalHelperBuilder marshal_helper)
+        {
+            if (HasFlag(RpcClientBuilderFlags.ComObject))
+            {
+                AdditionalArguments args = null;
+                if (type.IsConstant)
+                {
+                    CodeExpression iid_exp = new CodeObjectCreateExpression(typeof(Guid).ToRef(), CodeGenUtils.GetPrimitive(type.Iid.ToString()));
+                    args = new AdditionalArguments(false, iid_exp);
+                }
+
+                return new RpcTypeDescriptor(typeof(INdrComObject), nameof(NdrUnmarshalBuffer.ReadComObject),
+                        marshal_helper, nameof(NdrMarshalBuffer.WriteComObject), type, type.IidIsDescriptor, null, args, null, RpcPointerType.Unique);
+            }
+            else
+            {
+                return new RpcTypeDescriptor(typeof(NdrInterfacePointer), nameof(NdrUnmarshalBuffer.ReadInterfacePointer),
+                    nameof(NdrMarshalBuffer.WriteInterfacePointer), type, RpcPointerType.Unique);
+            }
+        }
+
         private RpcTypeDescriptor GetTypeDescriptorInternal(NdrBaseTypeReference type, MarshalHelperBuilder marshal_helper)
         {
             RpcTypeDescriptor ret_desc = null;
@@ -497,10 +523,9 @@ namespace NtApiDotNet.Win32.Rpc
             {
                 ret_desc = GetTypeDescriptor(byte_count_pointer_type.Type, marshal_helper);
             }
-            else if (type is NdrInterfacePointerTypeReference)
+            else if (type is NdrInterfacePointerTypeReference intf_type)
             {
-                ret_desc = new RpcTypeDescriptor(typeof(NdrInterfacePointer), nameof(NdrUnmarshalBuffer.ReadInterfacePointer),
-                    nameof(NdrMarshalBuffer.WriteInterfacePointer), type, RpcPointerType.Unique);
+                ret_desc = GetInterfacePointerTypeDescriptor(intf_type, marshal_helper);
             }
             else if (type is NdrPipeTypeReference pipe_type)
             {
@@ -520,8 +545,13 @@ namespace NtApiDotNet.Win32.Rpc
             NdrFormatter formatter = new NdrFormatter(new Dictionary<Guid, string>(), s=> s, DefaultNdrFormatterFlags.RemoveComments);
             var type_name_arg = CodeGenUtils.GetPrimitive($"{type.Format} - {type.FormatType(formatter)}");
             AdditionalArguments additional_args = new AdditionalArguments(false, type_name_arg);
+            RpcPointerType p_type = RpcPointerType.None;
+            if (type is NdrUserMarshalTypeReference user_marshal && user_marshal.Flags.HasFlagSet(NdrUserMarshalFlags.USER_MARSHAL_UNIQUE))
+            {
+                p_type = RpcPointerType.Unique;
+            }
             return new RpcTypeDescriptor(typeof(NdrUnsupported), nameof(NdrUnmarshalBuffer.ReadUnsupported), marshal_helper,
-                nameof(NdrMarshalBuffer.WriteUnsupported), type, null, null, additional_args, additional_args);
+                nameof(NdrMarshalBuffer.WriteUnsupported), type, null, null, additional_args, additional_args, p_type);
         }
 
         // Should implement this for each type rather than this.
@@ -878,7 +908,7 @@ namespace NtApiDotNet.Win32.Rpc
 
         private void GenerateClient(string name, CodeNamespace ns, int complex_type_count, MarshalHelperBuilder marshal_helper)
         {
-            if (!_procs.Any())
+            if (!_procs.Any() && _complex_types_only)
             {
                 return;
             }
@@ -886,13 +916,25 @@ namespace NtApiDotNet.Win32.Rpc
             CodeTypeDeclaration last_type = type;
             type.AddStartRegion("Client Implementation");
             type.IsClass = true;
-            type.TypeAttributes = TypeAttributes.Public | TypeAttributes.Sealed;
+            type.TypeAttributes = TypeAttributes.Public;
             type.BaseTypes.Add(typeof(RpcClientBase));
+            bool com_object = HasFlag(RpcClientBuilderFlags.ComObject);
+            if (com_object)
+            {
+                type.ImplementComObject();
+            }
+            else
+            {
+                type.TypeAttributes |= TypeAttributes.Sealed;
+            }
 
             CodeConstructor constructor = type.AddConstructor(MemberAttributes.Public | MemberAttributes.Final);
             constructor.BaseConstructorArgs.Add(CodeGenUtils.GetPrimitive(_interface_id.ToString()));
             constructor.BaseConstructorArgs.Add(CodeGenUtils.GetPrimitive(_interface_ver.Major));
             constructor.BaseConstructorArgs.Add(CodeGenUtils.GetPrimitive(_interface_ver.Minor));
+
+            CodeExpression[] marshal_args = com_object ? new[] { CodeGenUtils.GetMarshalerExpression() } 
+                : Array.Empty<CodeExpression>();
 
             type.CreateSendReceive(marshal_helper);
 
@@ -937,7 +979,7 @@ namespace NtApiDotNet.Win32.Rpc
                     proc.Params.Select(p => Tuple.Create(p.Offset, p.Name)).ToList();
 
                 method.ReturnType = return_type.CodeType;
-                method.CreateMarshalObject(MARSHAL_NAME, marshal_helper);
+                method.CreateMarshalObject(MARSHAL_NAME, marshal_helper, marshal_args);
 
                 int out_parameter_count = 0;
                 List<Action> pipe_marshal_cmds = new List<Action>();
@@ -1112,7 +1154,12 @@ namespace NtApiDotNet.Win32.Rpc
             AddServerComment(unit);
             CodeNamespace ns = unit.AddNamespace(ns_name);
             bool type_decode = HasFlag(RpcClientBuilderFlags.GenerateComplexTypeEncodeMethods);
-            MarshalHelperBuilder marshal_helper = new MarshalHelperBuilder(ns, MARSHAL_HELPER_NAME, UNMARSHAL_HELPER_NAME, type_decode);
+            bool transport_marshaler = HasFlag(RpcClientBuilderFlags.ComObject);
+            if (type_decode && transport_marshaler)
+            {
+                throw new NotSupportedException("Can't support complex type encoding and COM object marshaling.");
+            }
+            MarshalHelperBuilder marshal_helper = new MarshalHelperBuilder(ns, MARSHAL_HELPER_NAME, UNMARSHAL_HELPER_NAME, type_decode, transport_marshaler);
             int complex_type_count = GenerateComplexTypes(ns, marshal_helper);
             if (type_decode)
             {
@@ -1178,6 +1225,7 @@ namespace NtApiDotNet.Win32.Rpc
         private RpcClientBuilder(IEnumerable<NdrComplexTypeReference> complex_types, RpcClientBuilderArguments args)
             : this(Array.Empty<NdrProcedureDefinition>(), Guid.Empty, new Version(), string.Empty, complex_types, args)
         {
+            _complex_types_only = true;
         }
 
         private RpcClientBuilder(IRpcBuildableClient client, RpcClientBuilderArguments args) 

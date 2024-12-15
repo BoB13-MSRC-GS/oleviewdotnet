@@ -14,7 +14,6 @@
 //    You should have received a copy of the GNU General Public License
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
-using Microsoft.Win32;
 using NtApiDotNet;
 using OleViewDotNet.Database;
 using OleViewDotNet.Interop;
@@ -26,18 +25,23 @@ using OleViewDotNet.Utilities;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Xml.Linq;
+
+/* ADDED */
+using Microsoft.Win32;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Threading;
+using System.Security.Claims;
+/* ADDED */
 
 namespace OleViewDotNet.Forms;
 
@@ -402,7 +406,7 @@ internal partial class COMRegistryViewer : UserControl
 
     private static TreeNode CreateInterfaceNode(COMRegistry registry, COMInterfaceEntry ent)
     {
-        return CreateNode($"{ent.Iid.FormatGuid()} - {ent.Name}", 
+        return CreateNode($"{ent.Iid.FormatGuid()} - {ent.Name}",
             InterfaceKey, ent, BuildInterfaceToolTip(ent, null));
     }
 
@@ -411,11 +415,11 @@ internal partial class COMRegistryViewer : UserControl
         return CreateNode(ent.Name, InterfaceKey, ent, BuildInterfaceToolTip(ent, instance));
     }
 
-    /* KWAKMU18 ADDED 20240906 - Add Overloading Method */
+    /* ADDED */
     private TreeNode CreateInterfaceNameNode(COMRegistry registry, COMInterfaceEntry ent, COMInterfaceInstance instance, String clsid)
     {
         if (!Directory.Exists("interfaces\\iids")) Directory.CreateDirectory("interfaces\\iids");
-        String path = "interfaces\\iids\\" + ent.Iid.ToString() + ".txt"; 
+        String path = "interfaces\\iids\\" + ent.Iid.ToString() + ".txt";
         TreeNode treeNode = CreateNode(ent.Name, InterfaceKey, ent, BuildInterfaceToolTip(ent, instance));
         sourceCodeViewerControl.AutoParse = true;
         using (StreamWriter writer = new StreamWriter(path))
@@ -424,7 +428,7 @@ internal partial class COMRegistryViewer : UserControl
         }
         return treeNode;
     }
-    /* KWAKMU18 ADDED 20240906 - Add Overloading Method */
+    /* ADDED */
 
     private static IEnumerable<TreeNode> LoadCLSIDs(COMRegistry registry)
     {
@@ -460,14 +464,14 @@ internal partial class COMRegistryViewer : UserControl
 
     private static IEnumerable<TreeNode> LoadProgIDs(COMRegistry registry)
     {
-        return registry.Progids.Values.Select(p => 
+        return registry.Progids.Values.Select(p =>
         CreateNode(p.ProgID, ClassKey, p, BuildProgIDToolTip(registry, p)));
     }
 
     private static IEnumerable<TreeNode> LoadCLSIDsByNames(COMRegistry registry)
     {
-        return registry.Clsids.Values.Select(ent 
-            => CreateNode(ent.Name, ClassKey, 
+        return registry.Clsids.Values.Select(ent
+            => CreateNode(ent.Name, ClassKey,
             ent, BuildCLSIDToolTip(registry, ent))).OrderBy(n => n.Text);
     }
 
@@ -493,7 +497,7 @@ internal partial class COMRegistryViewer : UserControl
         {
             builder.AppendLine($"Access Control: 0x{proc.AccessControl.ToInt64():X}");
         }
-        builder.AppendLine(COMUtilities.FormatBitness(proc.Is64Bit));
+        builder.AppendLine(AppUtilities.FormatBitness(proc.Is64Bit));
         return builder.ToString();
     }
 
@@ -688,13 +692,13 @@ internal partial class COMRegistryViewer : UserControl
     {
         var total_intfs = registry.Interfaces.Values.AsEnumerable();
         if (runtime_interfaces)
-            total_intfs = total_intfs.Where(i => i.RuntimeInterface);
+            total_intfs = total_intfs.Where(i => i.IsWinRTType);
 
         if (by_name)
         {
             return total_intfs.OrderBy(i => i.Name).Select(i => CreateInterfaceNameNode(registry, i, null));
         }
-        
+
         return total_intfs.Select(i => CreateInterfaceNode(registry, i));
     }
 
@@ -806,13 +810,13 @@ internal partial class COMRegistryViewer : UserControl
 
     private static IEnumerable<TreeNode> LoadAppIDs(COMRegistry registry, bool filterIL, bool filterAC)
     {
-        var clsidsByAppId = registry.ClsidsByAppId; 
+        var clsidsByAppId = registry.ClsidsByAppId;
         var appids = registry.AppIDs;
 
         List<TreeNode> serverNodes = new();
         foreach (var pair in appids)
         {
-            COMAppIDEntry appidEnt = appids[pair.Key]; 
+            COMAppIDEntry appidEnt = appids[pair.Key];
 
             if (filterIL && COMSecurity.GetILForSD(appidEnt.AccessPermission) == TokenIntegrityLevel.Medium &&
                 COMSecurity.GetILForSD(appidEnt.LaunchPermission) == TokenIntegrityLevel.Medium)
@@ -1000,7 +1004,7 @@ internal partial class COMRegistryViewer : UserControl
     {
         Dictionary<string, TreeNode> tree = new();
         List<TreeNode> base_nodes = new();
-        foreach (var intf in registry.Interfaces.Values.Where(i => i.RuntimeInterface).OrderBy(i => i.Name))
+        foreach (var intf in registry.Interfaces.Values.Where(i => i.HasRuntimeType).OrderBy(i => i.Name))
         {
             var node = CreateNodes(base_nodes, tree, intf.Name);
             node.ImageKey = InterfaceKey;
@@ -1015,19 +1019,20 @@ internal partial class COMRegistryViewer : UserControl
     {
         node.Nodes.AddRange(intfs.Select(i => CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(i.Iid), i)).OrderBy(n => n.Text).ToArray());
     }
-    /* KWAKMU18 ADDED 2024???? - Add Overloading Method */
+
+    /* Added */
     private void AddInterfaceNodes(TreeNode node, IEnumerable<COMInterfaceInstance> intfs, String clsid)
     {
         node.Nodes.AddRange(intfs.Select(i => CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(i.Iid), i, clsid)).OrderBy(n => n.Text).ToArray());
     }
-    /* KWAKMU18 ADDED 2024???? - Add Overloading Method */
+    /* Added */
 
     private async Task SetupCLSIDNodeTree(ICOMClassEntry clsid, TreeNode node, bool bRefresh)
     {
-        node.Nodes.Clear();
-        /* KWAKMU18 ADDED 20240917 - TEST */
+        /* Added */
         bool success = true;
-        /* KWAKMU18 ADDED 20240917 - TEST */
+        /* Added */
+        node.Nodes.Clear();
         TreeNode wait_node = CreateNode("Please Wait, Populating Interfaces", InterfaceKey, null);
         node.Nodes.Add(wait_node);
         try
@@ -1035,38 +1040,28 @@ internal partial class COMRegistryViewer : UserControl
             await clsid.LoadSupportedInterfacesAsync(bRefresh, null);
             int interface_count = clsid.Interfaces.Count();
             int factory_count = clsid.FactoryInterfaces.Count();
-            //node.Nodes.Remove(wait_node);
             if (interface_count == 0 && factory_count == 0)
             {
-                /* KWAKMU18 20240918 ADDED - TEST */
                 wait_node.Text = "Error querying COM interfaces - Timeout";
                 success = false;
-                /* KWAKMU18 20240918 ADDED - TEST */
             }
             else
             {
                 treeComRegistry.SuspendLayout();
                 if (interface_count > 0)
                 {
-                    //node.Nodes.Remove(wait_node);
-                    /* KWAKMU18 ADDED 20241002 - Add Parameter: Clsid */
                     AddInterfaceNodes(node, clsid.Interfaces, clsid.Clsid.ToString());
-                    /* KWAKMU18 ADDED 20240906 - Add Parameter: Class Name */
                 }
                 else
                 {
-                    /* KWAKMU18 20240918 ADDED - TEST */
                     wait_node.Text = "Error querying COM interfaces - No Instance Interfaces";
                     success = false;
-                    /* KWAKMU18 20240918 ADDED - TEST */
                 }
 
                 if (factory_count > 0)
                 {
                     TreeNode factory = CreateNode("Factory Interfaces", FolderKey, null);
-                    /* KWAKMU18 ADDED 20240906 - Add Parameter: Class Name */
                     AddInterfaceNodes(factory, clsid.FactoryInterfaces);
-                    /* KWAKMU18 ADDED 20240906 - Add Parameter: Class Name */
                     node.Nodes.Add(factory);
 
                     if (clsid is COMCLSIDEntry clsid_entry &&
@@ -1091,70 +1086,165 @@ internal partial class COMRegistryViewer : UserControl
         }
         catch (Win32Exception ex)
         {
-            /* KWAKMU18 20240918 ADDED - TEST */
             wait_node.Text = $"Error querying COM interfaces - {ex.Message}";
             success = false;
-            /* KWAKMU18 20240918 ADDED - TEST */
         }
-        node.Nodes.Remove(wait_node);
-        /* KWAKMU18 20240918 ADDED - TEST */
+
+        /* Added */
+        // If oleviewdotnet failed to extract interfaces from class,
+        // will create FindInterfaceForm and runs FindInterface.exe, FindInterfaceInproc.exe to find interface.
+        // FindInterface.exe will call CoCreateInstance(CLSCTX_LOCAL_SERVER) with iids registered in HKEY_CLASSES_ROOT\Interface.
+        // FindInterfaceInproc.exe will call CoCreateInstance(CLSCTX_INPROC_SERVER) with iids registered in HKEY_CLASSES_ROOT\Interface.
+
         if (success == false || clsid.Interfaces.Count() < 2)
         {
-            Form popup = new Form();
-            popup.Text = "Please Wait...";
-            popup.StartPosition = FormStartPosition.CenterScreen;
-            popup.Width = 300;
-            popup.Height = 150;
+            this.findInterfaceForm = new FindInterfaceForm();
+            Thread uiThread = new Thread(StartFindInterfaceForm);
+            uiThread.Start();
 
-            Label label = new Label();
-            label.Text = "Resolving Interfaces...";
-            label.Dock = DockStyle.Fill;
-            label.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            popup.Controls.Add(label);
-            
-            popup.Show();
-            string registryPath = @"Interface";
-            String classGuid = "{" + clsid.Clsid.ToString() + "}";
-            Process process = new Process();
-            process.StartInfo.FileName = "test.exe";
-            process.StartInfo.Arguments = $"0 {classGuid}";
-            process.StartInfo.CreateNoWindow = true;
-            //process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+            findInterfaceForm.UpdateLabel1($"Finding Interface for CLSID {clsid.Clsid.ToString()}");
+            findInterfaceForm.UpdateLabel5("Waiting");
+            findInterfaceForm.UpdateLabel6("Waiting");
+            Application.DoEvents();
 
-            try
+            Thread inProcThread = new Thread(RunFindInterface);
+            Thread localThread = new Thread(RunFindInterface);
+
+            inProcThread.Start((true, clsid));
+            localThread.Start((false, clsid));
+
+            inProcThread.Join();
+            localThread.Join();
+
+            if (findInterfaceForm.inProcRetval != 0 && findInterfaceForm.localRetval != 0)
             {
-                process.Start();
-                process.WaitForExit();
-                int exitCode = process.ExitCode;
+                wait_node.Text = $"Failed to find interfaces.";
+                if (File.Exists("now.local")) File.Delete("now.local");
+                if (File.Exists("now.inproc")) File.Delete("now.inproc");
+                Thread.Sleep(1000);
+                findInterfaceForm.Close();
+                return;
             }
-            catch
+            node.Nodes.Clear();
+            if (findInterfaceForm.inProcRetval == 0)
             {
-                MessageBox.Show("Failed to resolve interfaces.");
-            }
-            popup.Close();
-            process.Dispose();
-            if (!File.Exists("now.list")) return;
-            using (StreamReader reader = new StreamReader("now.list"))
-            {
-                string line;
-                while ((line = reader.ReadLine()) != null)
+                using (StreamReader reader = new StreamReader("now.inproc"))
                 {
-                    if (string.IsNullOrWhiteSpace(line)) break;
-                    string[] parts = line.Split(new string[] { " - " }, StringSplitOptions.None);
-                    Guid guid = new Guid(parts[0]);
-                    //if (string.IsNullOrWhiteSpace(parts[1])) node.Nodes.Add(CreateNode(parts[0].Substring(1,36), InterfaceKey, null));
-                    //else node.Nodes.Add(CreateNode(parts[1], InterfaceKey, null));
-                    COMInterfaceInstance comInterfaceInstance = new COMInterfaceInstance(guid, m_registry);
-                    node.Nodes.Add(CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(comInterfaceInstance.Iid), comInterfaceInstance));
-                    using (StreamWriter writer = new StreamWriter($"interfaces\\iids\\{comInterfaceInstance.Iid}.txt"))
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
                     {
-                        writer.Write(clsid.Clsid.ToString());
+                        if (string.IsNullOrWhiteSpace(line)) break;
+                        Guid guid = new Guid(line);
+                        COMInterfaceInstance comInterfaceInstance = new COMInterfaceInstance(guid, m_registry);
+                        node.Nodes.Add(CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(comInterfaceInstance.Iid), comInterfaceInstance));
+                        using (StreamWriter writer = new StreamWriter($"interfaces\\iids\\{comInterfaceInstance.Iid}.txt"))
+                        {
+                            writer.Write(clsid.Clsid.ToString());
+                        }
                     }
                 }
             }
+            else if (findInterfaceForm.localRetval == 0)
+            {
+                using (StreamReader reader = new StreamReader("now.local"))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) break;
+                        Guid guid = new Guid(line);
+                        COMInterfaceInstance comInterfaceInstance = new COMInterfaceInstance(guid, m_registry);
+                        node.Nodes.Add(CreateInterfaceNameNode(m_registry, m_registry.MapIidToInterface(comInterfaceInstance.Iid), comInterfaceInstance));
+                        using (StreamWriter writer = new StreamWriter($"interfaces\\iids\\{comInterfaceInstance.Iid}.txt"))
+                        {
+                            writer.Write(clsid.Clsid.ToString());
+                        }
+                    }
+                }
+            }
+            if (File.Exists("now.local")) File.Delete("now.local");
+            if (File.Exists("now.inproc")) File.Delete("now.inproc");
+            Thread.Sleep(1000);
+            findInterfaceForm.Close();
         }
-        /* KWAKMU18 20240918 ADDED - TEST */
+        else node.Nodes.Remove(wait_node);
+        /* Added */
     }
+
+    /* Add */
+    // UI Thread for FindInterface Form.
+    public void RunFindInterface(object obj)
+    {
+        var data = ((bool isInproc, ICOMClassEntry clsid))obj;
+        bool isInproc = data.isInproc;
+        ICOMClassEntry clsid = data.clsid;
+
+        Thread repeatThread = new Thread(findInterfaceForm.RepeatUpdateLabel);
+        repeatThread.Start(isInproc);
+        Process process = new Process();
+        if (isInproc) process.StartInfo.FileName = "FindInterfaceInproc.exe";
+        else process.StartInfo.FileName = "FindInterface.exe";
+        process.StartInfo.Arguments = $"{{{clsid.Clsid.ToString()}}}";
+        process.StartInfo.CreateNoWindow = true;
+        process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+
+        try
+        {
+            process.Start();
+            process.WaitForExit();
+        }
+        catch
+        {
+        }
+        int exitCode = process.ExitCode;
+        process.Close();
+        process.Dispose();
+
+        Thread.Sleep(100);
+        repeatThread.Abort();
+
+        if (exitCode == 0)
+        {
+            if (isInproc) findInterfaceForm.UpdateLabel6("Success");
+            else findInterfaceForm.UpdateLabel5("Success");
+        }
+        else if (exitCode == -1)
+        {
+            if (isInproc) findInterfaceForm.UpdateLabel6("Error: TIMEOUT");
+            else findInterfaceForm.UpdateLabel5("Error: TIMEOUT");
+        }
+        else if (exitCode == -286331154)
+        {
+            if (isInproc) findInterfaceForm.UpdateLabel6("Error: UNKNOWN");
+            else findInterfaceForm.UpdateLabel5("Error: UNKNOWN");
+        }
+        else if (exitCode == -2147467262)
+        {
+            if (isInproc) findInterfaceForm.UpdateLabel6("Error: No matching interface.");
+            else findInterfaceForm.UpdateLabel5("Error: No matching interface.");
+        }
+        else if (exitCode > 0)
+        {
+            if (isInproc) findInterfaceForm.UpdateLabel6($"Error: LastErrorValue {exitCode}");
+            findInterfaceForm.UpdateLabel5($"Error: LastErrorValue {exitCode}");
+        }
+        Application.DoEvents();
+        if (isInproc) findInterfaceForm.inProcRetval = exitCode;
+        else findInterfaceForm.localRetval = exitCode;
+    }
+
+    public FindInterfaceForm findInterfaceForm;
+
+    void StartFindInterfaceForm()
+    {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+
+        //this.resolvingForm = new ResolvingForm();
+        Application.Run(findInterfaceForm);
+    }
+
+    /* Add */
 
     private static void AddTypeLibNodes(TreeNode node, IEnumerable<COMTypeLibTypeInfo> types, string category, string image_key)
     {
@@ -1528,6 +1618,11 @@ internal partial class COMRegistryViewer : UserControl
                     createSpecialToolStripMenuItem.DropDownItems.Add(createFactoryInPerUserRuntimeBrokerToolStripMenuItem);
                 }
 
+                if (runtime_class is not null && runtime_class.HasRuntimeType)
+                {
+                    createSpecialToolStripMenuItem.DropDownItems.Add(createRuntimeClassToolStripMenuItem);
+                }
+
                 contextMenuStrip.Items.Add(createSpecialToolStripMenuItem);
                 contextMenuStrip.Items.Add(refreshInterfacesToolStripMenuItem);
 
@@ -1576,7 +1671,7 @@ internal partial class COMRegistryViewer : UserControl
                     contextMenuStrip.Items.Add(viewProxyLibraryToolStripMenuItem);
                 }
 
-                if (RuntimeMetadata.Interfaces.ContainsKey(intf.Iid))
+                if (intf.TryGetRuntimeType(out _))
                 {
                     contextMenuStrip.Items.Add(viewRuntimeInterfaceToolStripMenuItem);
                 }
@@ -1617,8 +1712,8 @@ internal partial class COMRegistryViewer : UserControl
                 }
             }
 
-            if (m_filter_types.Contains(FilterType.CLSID) || 
-                m_filter_types.Contains(FilterType.RuntimeClass) || 
+            if (m_filter_types.Contains(FilterType.CLSID) ||
+                m_filter_types.Contains(FilterType.RuntimeClass) ||
                 m_filter_types.Contains(FilterType.ProgID))
             {
                 contextMenuStrip.Items.Add(queryAllInterfacesToolStripMenuItem);
@@ -1878,7 +1973,7 @@ internal partial class COMRegistryViewer : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
         finally
         {
@@ -2051,7 +2146,7 @@ internal partial class COMRegistryViewer : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -2104,6 +2199,7 @@ internal partial class COMRegistryViewer : UserControl
                 {
                     COMProxyFile proxy_file = COMProxyFile.GetFromCLSID(clsid);
                     COMProxyTypeInfo visible_interface = proxy_file.Entries.Where(e => e.Iid == selected_iid).FirstOrDefault();
+
                     EntryPoint.GetMainForm(m_registry).HostControl(
                         new COMRegistryViewer(
                             m_registry,
@@ -2150,7 +2246,7 @@ internal partial class COMRegistryViewer : UserControl
             GetClsidsFromNodes(clsids, treeComRegistry.Nodes);
             if (clsids.Count > 0)
             {
-                COMUtilities.QueryAllInterfaces(this, clsids,
+                FormUtils.QueryAllInterfaces(this, clsids,
                     options.ServerTypes, options.ConcurrentQueries,
                     options.RefreshInterfaces);
             }
@@ -2370,11 +2466,18 @@ internal partial class COMRegistryViewer : UserControl
         TreeNode node = treeComRegistry.SelectedNode;
         if (node is not null)
         {
-            if (node.Tag is COMInterfaceEntry ent && RuntimeMetadata.Interfaces.ContainsKey(ent.Iid))
+            if (node.Tag is COMInterfaceEntry ent)
             {
-                Assembly asm = RuntimeMetadata.Interfaces[ent.Iid].Assembly;
-                EntryPoint.GetMainForm(m_registry).HostControl(new TypeLibControl(asm.GetName().Name,
-                    asm, ent.Iid, false));
+                try
+                {
+                    Assembly asm = ent.GetRuntimeType().Assembly;
+                    EntryPoint.GetMainForm(m_registry).HostControl(new TypeLibControl(asm.GetName().Name,
+                        asm, ent.Iid, false));
+                }
+                catch (Exception ex)
+                {
+                    EntryPoint.ShowError(this, ex);
+                }
             }
         }
     }
@@ -2462,9 +2565,31 @@ internal partial class COMRegistryViewer : UserControl
         return curr_node;
     }
 
+    private void createRuntimeClassToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            if (GetSelectedClassEntry() is COMRuntimeClassEntry runtime_class)
+            {
+                Type runtime_type = runtime_class.GetRuntimeType();
+                if (runtime_type is null)
+                {
+                    return;
+                }
+
+                TypedObjectViewer viewer = new(m_registry, runtime_class.Name, runtime_type);
+                EntryPoint.GetMainForm(m_registry).HostControl(viewer, runtime_class.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            EntryPoint.ShowError(this, ex);
+        }
+    }
+
     private COMRegistryViewer(COMRegistry reg, COMRegistryDisplayMode mode,
-        TreeNode root_node, IEnumerable<FilterType> filter_types, 
-        string text, object visible_obj) 
+        TreeNode root_node, IEnumerable<FilterType> filter_types,
+        string text, object visible_obj)
         : this(reg, mode, Array.Empty<COMProcessEntry>(), new[] { root_node }, filter_types, text)
     {
         m_visible_node = FindVisibleNode(m_original_nodes, visible_obj);
@@ -2474,7 +2599,7 @@ internal partial class COMRegistryViewer : UserControl
     }
 
     private COMRegistryViewer(COMRegistry reg, COMRegistryDisplayMode mode,
-        IEnumerable<COMProcessEntry> processes, IEnumerable<TreeNode> nodes, 
+        IEnumerable<COMProcessEntry> processes, IEnumerable<TreeNode> nodes,
         IEnumerable<FilterType> filter_types, string text)
     {
         InitializeComponent();
@@ -2511,7 +2636,7 @@ internal partial class COMRegistryViewer : UserControl
     }
 
     public COMRegistryViewer(COMRegistry reg, COMTypeLib typelib, COMTypeLibTypeInfo visible_type)
-        : this(reg, COMRegistryDisplayMode.Typelibs, CreateTypeLibNodes(typelib), 
+        : this(reg, COMRegistryDisplayMode.Typelibs, CreateTypeLibNodes(typelib),
               new[] { FilterType.TypeLibTypeInfo }, typelib.ToString(), visible_type)
     {
     }
@@ -2520,36 +2645,18 @@ internal partial class COMRegistryViewer : UserControl
     : this(reg, COMRegistryDisplayMode.ProxyCLSIDs, CreateProxyNodes(proxy),
           new[] { FilterType.TypeLibTypeInfo }, proxy.Path, visible_type)
     {
-        /* KWAKMU18 20240908 ADDED - Add Code To Extract All Interfaces In Proxy Files */
-        // AddProxyNodes(node, proxy_file.Entries, "Interfaces", InterfaceKey);
+        /* Added */
+        // When we open class folder in Local Service tab or something,
+        // this will create <iid>.txt and write clsid in "iids\" directory to use ResolveMethod.
+        // And also, when we use "View Proxy Library", this will create <iid>.txt and write idl in "sequence\now" directory to use CallSequence.
+
         String fileName = Path.GetFileName(proxy.Path);
-        String path = "interfaces\\" + fileName + ".txt";
+        String path = $"interfaces\\{fileName}.txt";
         if (File.Exists(path)) File.Delete(path);
         sourceCodeViewerControl.ChangeToCpp();
         var tempNode = CreateNode("temp", ClassKey, proxy.ComplexTypes.Where(t => !t.IsUnion));
-        //tempNode.Nodes.AddRange(proxy.ComplexTypes.Select(type => CreateNode(type.Name, "temp", type)).ToArray());
-        //using (StreamWriter writer = new StreamWriter(path, append: true))
-        //{
-        //    writer.WriteLine(proxy.Path);
-        //    foreach (TreeNode nowNode in tempNode.Nodes)
-        //    {
-        //        sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
-        //        writer.WriteLine(sourceCodeViewerControl.Format());
-        //    }
-        //}
-        //tempNode = CreateNode("temp", ClassKey, proxy.ComplexTypes.Where(t => t.IsUnion));
-        //tempNode.Nodes.AddRange(proxy.ComplexTypes.Select(type => CreateNode(type.Name, "temp", type)).ToArray());
-        //using (StreamWriter writer = new StreamWriter(path, append: true))
-        //{
-        //    writer.WriteLine(proxy.Path);
-        //    foreach (TreeNode nowNode in tempNode.Nodes)
-        //    {
-        //        sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
-        //        writer.WriteLine(sourceCodeViewerControl.Format());
-        //    }
-        //}
         tempNode = CreateNode("temp", FolderKey, proxy.Entries);
-        tempNode.Nodes.AddRange(proxy.Entries.Select(type => CreateNode(type.Name, "temp", type)).ToArray());
+        tempNode.Nodes.AddRange(proxy.Entries.Select(type=>CreateNode(type.Name, "temp", type)).ToArray());
         if (!Directory.Exists("interfaces\\sequence")) Directory.CreateDirectory("interfaces\\sequence");
         using (StreamWriter writer = new StreamWriter(path, append: true))
         {
@@ -2559,8 +2666,7 @@ internal partial class COMRegistryViewer : UserControl
             foreach (TreeNode nowNode in tempNode.Nodes)
             {
                 sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
-                
-                //writer.WriteLine(sourceCodeViewerControl.Format());
+
                 if (File.Exists($"interfaces\\iids\\{sourceCodeViewerControl.GetIid()}.txt"))
                 {
                     using (StreamReader reader = new StreamReader($"interfaces\\iids\\{sourceCodeViewerControl.GetIid()}.txt"))
@@ -2593,6 +2699,7 @@ internal partial class COMRegistryViewer : UserControl
                 foreach (TreeNode nowNode in tempNode.Nodes)
                 {
                     sourceCodeViewerControl.SelectedObject = nowNode?.Tag;
+                    if (File.Exists($"interfaces\\iids\\{sourceCodeViewerControl.GetIid()}.txt")) File.Delete($"interfaces\\iids\\{sourceCodeViewerControl.GetIid()}.txt");
                     using (StreamWriter tempwriter = new StreamWriter($"interfaces\\iids\\{sourceCodeViewerControl.GetIid()}.txt"))
                     {
                         tempwriter.Write(clsid);
@@ -2601,14 +2708,8 @@ internal partial class COMRegistryViewer : UserControl
             }
             sourceCodeViewerControl.m_isReally = true;
         }
-        /* KWAKMU18 20240908 ADDED - Add Code To Extract All Interfaces In Proxy Files */
 
-        /* KWAKMU18 20240911 ADDED - Add Code to Extract All Unions & Structs In Proxy Files */
-        //AddProxyNodes(node, proxy_file.ComplexTypes.Where(t => !t.IsUnion), "Structs", ClassKey);
-        //AddProxyNodes(node, proxy_file.ComplexTypes.Where(t => t.IsUnion), "Unions", ClassKey);
-
-
-        /* KWAKMU18 20240911 ADDED - Add Code to Extract All Unions & Structs In Proxy Files */
+        /* Added */
     }
     #endregion
 }

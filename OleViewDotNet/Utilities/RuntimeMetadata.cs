@@ -34,7 +34,7 @@ public sealed class RuntimeMetadata
     private static readonly Dictionary<string, Assembly> _cached_reflection_assemblies = new();
     private static readonly Lazy<RuntimeMetadata> m_metadata = new(CreateMetadata);
 
-    private RuntimeMetadata() 
+    private RuntimeMetadata()
         : this(new(), new(), new())
     {
     }
@@ -44,6 +44,48 @@ public sealed class RuntimeMetadata
         m_interfaces = interfaces;
         m_classes = classes;
         m_assemblies = assemblies;
+    }
+
+    private static void AddType(Dictionary<Guid, Type> interfaces, Dictionary<string, Type> classes, Type t)
+    {
+        if (string.IsNullOrEmpty(t.FullName))
+        {
+            return;
+        }
+        if (t.IsInterface)
+        {
+            foreach (var attr in t.GetCustomAttributesData())
+            {
+                if (attr.AttributeType.FullName == "Windows.Foundation.Metadata.GuidAttribute")
+                {
+                    if (!interfaces.ContainsKey(t.GUID))
+                    {
+                        interfaces[t.GUID] = t;
+
+                        foreach (var method in t.GetMethods())
+                        {
+                            AddType(interfaces, classes, method.ReturnType);
+                            foreach (var p in method.GetParameters())
+                            {
+                                AddType(interfaces, classes, p.ParameterType);
+                            }
+                        }
+
+                        if (t.IsConstructedGenericType)
+                        {
+                            foreach (var g in t.GetGenericArguments())
+                            {
+                                AddType(interfaces, classes, g);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else if (t.IsClass && t.IsPublic)
+        {
+            classes[t.FullName] = t;
+        }
     }
 
     private static RuntimeMetadata LoadMetadata()
@@ -77,20 +119,7 @@ public sealed class RuntimeMetadata
                 Type[] types = asm.GetTypes();
                 foreach (Type t in types)
                 {
-                    if (t.IsInterface)
-                    {
-                        foreach (var attr in t.GetCustomAttributesData())
-                        {
-                            if (attr.AttributeType.FullName == "Windows.Foundation.Metadata.GuidAttribute")
-                            {
-                                interfaces[t.GUID] = t;
-                            }
-                        }
-                    }
-                    else if (t.IsClass && t.IsPublic)
-                    {
-                        classes[t.FullName] = t;
-                    }
+                    AddType(interfaces, classes, t);
                 }
             }
             catch

@@ -15,7 +15,6 @@
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
 using OleViewDotNet.TypeLib.Instance;
-using OleViewDotNet.TypeLib.Parser;
 using OleViewDotNet.Utilities.Format;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,7 +25,7 @@ namespace OleViewDotNet.TypeLib;
 public sealed class COMTypeLibDispatch : COMTypeLibInterfaceBase
 {
     #region Private Members
-    private protected override void OnParse(COMTypeLibParser.TypeInfo type_info, TYPEATTR attr)
+    private protected override void OnParse(COMTypeLibTypeInfoParser type_info, TYPEATTR attr)
     {
         base.OnParse(type_info, attr);
         if (attr.wTypeFlags.HasFlag(TYPEFLAGS.TYPEFLAG_FDUAL))
@@ -48,8 +47,8 @@ public sealed class COMTypeLibDispatch : COMTypeLibInterfaceBase
     #endregion
 
     #region Internal Members
-    internal COMTypeLibDispatch(COMTypeDocumentation doc, TYPEATTR attr)
-        : base(doc, attr)
+    internal COMTypeLibDispatch(COMTypeDocumentation doc, TYPEATTR attr, IEnumerable<COMTypeCustomDataItem> custom_data)
+        : base(doc, attr, custom_data)
     {
     }
 

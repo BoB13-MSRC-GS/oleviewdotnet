@@ -18,7 +18,8 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
-using OleViewDotNet.Utilities;
+using OleViewDotNet.TypeLib.Instance;
+using OleViewDotNet.TypeManager;
 
 namespace OleViewDotNet.Interop;
 
@@ -26,7 +27,7 @@ internal class TypeLibCallback : ITypeLibImporterNotifySink
 {
     public Assembly ResolveRef(object tl)
     {
-        return COMUtilities.ConvertTypeLibToAssembly((ITypeLib)tl, _progress);
+        return COMTypeManager.ConvertTypeLibToAssembly(new COMTypeLibInstance((ITypeLib)tl, string.Empty), _progress);
     }
 
     public void ReportEvent(ImporterEventKind eventKind, int eventCode, string eventMsg)

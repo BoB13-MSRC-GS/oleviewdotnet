@@ -17,8 +17,8 @@
 using Microsoft.Win32;
 using OleViewDotNet.Interop;
 using OleViewDotNet.Interop.SxS;
-using OleViewDotNet.TypeLib;
 using OleViewDotNet.Proxy;
+using OleViewDotNet.TypeLib;
 using OleViewDotNet.Utilities;
 using OleViewDotNet.Utilities.Format;
 using System;
@@ -30,8 +30,8 @@ using System.Xml.Serialization;
 
 namespace OleViewDotNet.Database;
 
-public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry>, IXmlSerializable, 
-    ICOMGuid, ICOMSourceCodeFormattable, ICOMSourceCodeParsable
+public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry>, IXmlSerializable,
+    ICOMGuid, ICOMSourceCodeFormattable, ICOMSourceCodeParsable, ICOMRuntimeType, ICOMSourceCodeEditable
 {
     #region Private Members
     private ICOMSourceCodeFormattable m_formattable;
@@ -85,7 +85,7 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
     {
         if (m_formattable is not null)
             return true;
-        if (RuntimeInterface && RuntimeMetadata.Interfaces.TryGetValue(Iid, out Type type))
+        if (HasRuntimeType && TryGetRuntimeType(out Type type))
         {
             m_formattable = new SourceCodeFormattableType(type);
         }
@@ -123,15 +123,15 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
 
         return InternalName == right.InternalName && Iid == right.Iid && ProxyClsid == right.ProxyClsid
             && NumMethods == right.NumMethods && Base == right.Base && TypeLib == right.TypeLib
-            && TypeLibVersion == right.TypeLibVersion && RuntimeInterface == right.RuntimeInterface
-            && Source == right.Source;
+            && TypeLibVersion == right.TypeLibVersion && RuntimeTypeName == right.RuntimeTypeName
+            && Source == right.Source && IsWinRTType == right.IsWinRTType;
     }
 
     public override int GetHashCode()
     {
         return InternalName.GetSafeHashCode() ^ Iid.GetHashCode() ^ ProxyClsid.GetHashCode() ^ NumMethods.GetHashCode()
-            ^ Base.GetSafeHashCode() ^ TypeLib.GetHashCode() ^ TypeLibVersion.GetSafeHashCode() ^ RuntimeInterface.GetHashCode()
-            ^ Source.GetHashCode();
+            ^ Base.GetSafeHashCode() ^ TypeLib.GetHashCode() ^ TypeLibVersion.GetSafeHashCode() ^ RuntimeTypeName.GetSafeHashCode()
+            ^ Source.GetHashCode() ^ IsWinRTType.GetHashCode();
     }
 
     public override string ToString()
@@ -171,7 +171,7 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
     {
     }
 
-    private COMInterfaceEntry(COMRegistry registry, Guid iid, Guid proxyclsid, 
+    private COMInterfaceEntry(COMRegistry registry, Guid iid, Guid proxyclsid,
         int nummethods, string baseName, string name) : this(registry)
     {
         Iid = iid;
@@ -182,20 +182,22 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
         TypeLibVersion = string.Empty;
     }
 
-    internal COMInterfaceEntry(COMRegistry registry, ActCtxComInterfaceRedirection intf_redirection) 
-        : this(registry, intf_redirection.Iid, intf_redirection.ProxyStubClsid32, intf_redirection.NumMethods, 
+    internal COMInterfaceEntry(COMRegistry registry, ActCtxComInterfaceRedirection intf_redirection)
+        : this(registry, intf_redirection.Iid, intf_redirection.ProxyStubClsid32, intf_redirection.NumMethods,
               string.Empty, intf_redirection.Name)
     {
         TypeLib = intf_redirection.TypeLibraryId;
         Source = COMRegistryEntrySource.ActCtx;
     }
 
-    internal COMInterfaceEntry(COMRegistry registry, Type type) 
-        : this(registry, type.GUID, Guid.Empty, type.GetMethods().Length + 6, "IInspectable", type.FullName)
+    internal COMInterfaceEntry(COMRegistry registry, Type type, bool winrt)
+        : this(registry, type.GUID, Guid.Empty, type.GetMethods().Length + (winrt ? 6 : 3),
+              winrt ? "IInspectable" : "IUnknown", type.FullName)
     {
         Database.IidNameCache.TryAdd(Iid, InternalName);
-        RuntimeInterface = true;
+        RuntimeTypeName = type.AssemblyQualifiedName;
         Source = COMRegistryEntrySource.Metadata;
+        IsWinRTType = winrt;
     }
 
     public COMInterfaceEntry(COMRegistry registry, Guid iid, RegistryKey rootKey)
@@ -213,7 +215,7 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
         }
     }
 
-    internal COMInterfaceEntry(COMRegistry registry, COMPackagedInterfaceEntry entry) 
+    internal COMInterfaceEntry(COMRegistry registry, COMPackagedInterfaceEntry entry)
         : this(registry, entry.Iid, entry.ProxyStubCLSID, 3, "IUnknown", string.Empty)
     {
         if (entry.UseUniversalMarshaler)
@@ -239,7 +241,7 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
 
     internal string InternalName { get; set; }
 
-    public string Name => string.IsNullOrWhiteSpace(InternalName) ? Iid.FormatGuid() : COMUtilities.DemangleWinRTName(InternalName);
+    public string Name => string.IsNullOrWhiteSpace(InternalName) ? Iid.FormatGuid() : WinRTNameUtils.DemangleName(InternalName);
 
     public Guid Iid
     {
@@ -279,27 +281,13 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
 
     public COMTypeLibEntry TypeLibEntry => Database.Typelibs.GetGuidEntry(TypeLib);
 
-    public COMTypeLibVersionEntry TypeLibVersionEntry
-    {
-        get
-        {
-            var typelib = TypeLibEntry;
-            if (typelib is not null)
-            {
-                return typelib.Versions.Where(v => v.Version == TypeLibVersion).FirstOrDefault();
-            }
-            return null;
-        }
-    }
+    public COMTypeLibVersionEntry TypeLibVersionEntry => TypeLibEntry?.Versions.Where(v => v.Version == TypeLibVersion).FirstOrDefault();
 
     public bool HasTypeLib => TypeLib != Guid.Empty;
 
     public bool HasProxy => ProxyClsid != Guid.Empty;
 
-    public bool RuntimeInterface
-    {
-        get; internal set;
-    }
+    public bool IsWinRTType { get; internal set; }
     #endregion
 
     #region Static Members
@@ -323,7 +311,7 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
     #endregion
 
     #region ICOMSourceCodeFormattable Implementation
-    bool ICOMSourceCodeFormattable.IsFormattable => RuntimeInterface 
+    bool ICOMSourceCodeFormattable.IsFormattable => HasRuntimeType
                 || TypeLibVersionEntry is not null || ProxyClassEntry is not null;
 
     void ICOMSourceCodeFormattable.Format(COMSourceCodeBuilder builder)
@@ -342,17 +330,25 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
         // If the runtime interface exists, that's already populated in CheckForParsed.
         if (TypeLibVersionEntry is not null)
         {
-            var typelib = TypeLibVersionEntry.Parse();
-            if (typelib.InterfacesByIid.TryGetValue(Iid, out COMTypeLibInterface intf))
+            try
             {
-                m_formattable = intf;
+                var typelib = TypeLibVersionEntry.Parse();
+                if (typelib.InterfacesByIid.TryGetValue(Iid, out COMTypeLibInterface intf))
+                {
+                    m_formattable = intf;
+                }
+                else
+                {
+                    m_formattable = new SourceCodeFormattableText("ERROR: Can't find type library for IID.");
+                }
+                return;
             }
-            else
+            catch
             {
-                m_formattable = new SourceCodeFormattableText("ERROR: Can't find type library for IID.");
             }
         }
-        else if (HasProxy)
+
+        if (HasProxy)
         {
             m_formattable = COMProxyInterface.GetFromIID(this);
         }
@@ -378,7 +374,8 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
         Base = reader.ReadString("base");
         TypeLibVersion = reader.ReadString("ver");
         TypeLib = reader.ReadGuid("tlib");
-        RuntimeInterface = reader.ReadBool("rt");
+        IsWinRTType = reader.ReadBool("rt");
+        RuntimeTypeName = reader.ReadString("rta");
         Source = reader.ReadEnum<COMRegistryEntrySource>("src");
 
         if (!string.IsNullOrWhiteSpace(InternalName))
@@ -396,8 +393,62 @@ public class COMInterfaceEntry : COMRegistryEntry, IComparable<COMInterfaceEntry
         writer.WriteOptionalAttributeString("base", Base);
         writer.WriteOptionalAttributeString("ver", TypeLibVersion);
         writer.WriteGuid("tlib", TypeLib);
-        writer.WriteBool("rt", RuntimeInterface);
+        writer.WriteBool("rt", IsWinRTType);
+        writer.WriteOptionalAttributeString("rta", RuntimeTypeName);
         writer.WriteEnum("src", Source);
+    }
+    #endregion
+
+    #region ICOMRuntimeType Implementation
+    public string RuntimeTypeName
+    {
+        get; internal set;
+    }
+
+    public bool HasRuntimeType => !string.IsNullOrEmpty(RuntimeTypeName);
+
+    public Type GetRuntimeType()
+    {
+        if (!HasRuntimeType)
+        {
+            return null;
+        }
+        return Type.GetType(RuntimeTypeName);
+    }
+
+    public bool TryGetRuntimeType(out Type type)
+    {
+        try
+        {
+            type = GetRuntimeType();
+            return type is not null;
+        }
+        catch
+        {
+            type = null;
+            return false;
+        }
+    }
+    #endregion
+
+    #region ICOMSourceCodeEditable Implementation
+    bool ICOMSourceCodeEditable.IsEditable
+    {
+        get
+        {
+            if (m_formattable is ICOMSourceCodeEditable editable)
+            {
+                return editable.IsEditable;
+            }
+            return false;
+        }
+    }
+    void ICOMSourceCodeEditable.Update()
+    {
+        if (m_formattable is ICOMSourceCodeEditable editable)
+        {
+            editable.Update();
+        }
     }
     #endregion
 }

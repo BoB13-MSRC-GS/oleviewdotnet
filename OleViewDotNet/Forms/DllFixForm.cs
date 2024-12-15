@@ -8,9 +8,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace OleViewDotNet.Forms
 {
+
+    // This form will get DLL/EXE filename and fix DLL/EXE used by ResolveMethod.
+
     public partial class DllFixForm : Form
     {
         public DllFixForm()
@@ -32,7 +36,7 @@ namespace OleViewDotNet.Forms
 
         private void button1_Click(object sender, EventArgs e)
         {
-            if (comboBox1.Text != "" && textBox1.Text!="")
+            if (comboBox1.Text != "" && textBox1.Text != "")
             {
                 MessageBox.Show("Please Select Only One.");
             }

@@ -15,9 +15,9 @@
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices.ComTypes;
 using OleViewDotNet.TypeLib.Instance;
-using OleViewDotNet.TypeLib.Parser;
 
 namespace OleViewDotNet.TypeLib;
 
@@ -70,6 +70,7 @@ public sealed class COMTypeLibVariable
             attrs.Add("replaceable");
         if (_flags.HasFlag(VARFLAGS.VARFLAG_FREADONLY))
             attrs.Add("readonly");
+        attrs.AddRange(CustomData.Select(d => d.FormatAttribute()));
         return attrs;
     }
 
@@ -82,12 +83,13 @@ public sealed class COMTypeLibVariable
     public string HelpFile => _doc.HelpFile ?? string.Empty;
     public object ConstValue { get; }
     public COMTypeLibTypeDesc Type { get; }
+    public IReadOnlyList<COMTypeCustomDataItem> CustomData { get; }
     #endregion
 
     #region Internal Members
-    internal COMTypeLibVariable(COMTypeLibParser.TypeInfo type_info, int index)
+    internal COMTypeLibVariable(COMTypeLibTypeInfoParser type_info, int index)
     {
-        using COMVarDesc desc = type_info.GetVarDesc(index);
+        COMTypeVariableDescriptor desc = type_info.GetVarDesc(index);
         _desc = desc.Descriptor;
         _doc = type_info.GetDocumentation(_desc.memid);
         if (_desc.varkind == VARKIND.VAR_CONST)
@@ -95,6 +97,7 @@ public sealed class COMTypeLibVariable
             ConstValue = COMTypeLibUtils.GetVariant(_desc.desc.lpvarValue);
         }
         Type = COMTypeLibTypeDesc.Parse(type_info, _desc.elemdescVar.tdesc);
+        CustomData = type_info.GetAllVarCustData(index);
         _flags = (VARFLAGS)_desc.wVarFlags;
     }
 

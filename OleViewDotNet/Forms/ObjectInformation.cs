@@ -14,10 +14,15 @@
 //    You should have received a copy of the GNU General Public License
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
+using NtApiDotNet.Win32.Rpc;
 using OleViewDotNet.Database;
 using OleViewDotNet.Interop;
 using OleViewDotNet.Marshaling;
+using OleViewDotNet.Rpc;
+using OleViewDotNet.TypeLib;
+using OleViewDotNet.TypeManager;
 using OleViewDotNet.Utilities;
+using OleViewDotNet.Viewers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -49,6 +54,7 @@ internal partial class ObjectInformation : UserControl
     public ObjectInformation(COMRegistry registry, ICOMClassEntry entry, string objName, object pObject, Dictionary<string, string> properties, COMInterfaceEntry[] interfaces)
     {
         m_entry = entry;
+        pObject = COMTypeManager.Unwrap(pObject);
         if (m_entry is null)
         {
             Guid clsid = COMUtilities.GetObjectClass(pObject);
@@ -59,7 +65,7 @@ internal partial class ObjectInformation : UserControl
         }
 
         m_registry = registry;
-        m_pEntry = ObjectCache.Add(objName, pObject, interfaces);
+        m_pEntry = new ObjectEntry(objName, pObject, interfaces);
         m_pObject = pObject;
         m_properties = properties;
         m_interfaces = interfaces.OrderBy(i => i.Name).ToArray();
@@ -140,8 +146,8 @@ internal partial class ObjectInformation : UserControl
             item.Tag = ent;
             item.SubItems.Add(ent.Iid.FormatGuid());
 
-            InterfaceViewers.ITypeViewerFactory factory = InterfaceViewers.InterfaceViewers.GetInterfaceViewer(ent.Iid);
-            if (factory is not null)
+            ITypeViewerFactory factory = InterfaceViewers.GetInterfaceViewer(ent);
+            if (factory is not null || ent.HasTypeLib || ent.HasRuntimeType || ent.HasProxy || COMTypeManager.HasInterfaceType(ent.Iid))
             {
                 item.SubItems.Add("Yes");
             }
@@ -169,6 +175,7 @@ internal partial class ObjectInformation : UserControl
         }
 
         openDispatchToolStripMenuItem.Visible = has_dispatch;
+        viewTypeLibraryToolStripMenuItem.Visible = has_dispatch;
         openOLEToolStripMenuItem.Visible = has_olecontrol;
         saveStreamToolStripMenuItem.Visible = has_persiststream;
         createToolStripMenuItem.Visible = has_classfactory;
@@ -182,22 +189,39 @@ internal partial class ObjectInformation : UserControl
         if (listViewInterfaces.SelectedItems.Count > 0)
         {
             COMInterfaceEntry ent = (COMInterfaceEntry)listViewInterfaces.SelectedItems[0].Tag;
-            InterfaceViewers.ITypeViewerFactory factory = InterfaceViewers.InterfaceViewers.GetInterfaceViewer(ent.Iid);
 
             try
             {
-                if (factory is not null)
+                ObjectEntry obj = m_pEntry;
+                ITypeViewerFactory factory = InterfaceViewers.GetInterfaceViewer(ent);
+                if (factory is null)
                 {
-                    Control frm = factory.CreateInstance(m_registry, m_entry, m_objName, m_pEntry);
-                    if ((frm is not null) && !frm.IsDisposed)
+                    if (!COMTypeManager.HasInterfaceType(ent.Iid) && ent.HasTypeLib)
                     {
-                        EntryPoint.GetMainForm(m_registry).HostControl(frm);
+                        FormUtils.ConvertTypeLib(this, ent.TypeLibVersionEntry, false);
                     }
+
+                    Type type = COMTypeManager.GetInterfaceType(ent);
+                    if (typeof(RpcClientBase).IsAssignableFrom(type))
+                    {
+                        obj = new ObjectEntry(ent.Name, RpcComUtils.CreateClient(type, m_pEntry.Instance, m_registry), m_interfaces);
+                        factory = new InstanceTypeViewerFactory(type);
+                    }
+                    else
+                    {
+                        factory = new InstanceTypeViewerFactory(type);
+                    }
+                }
+
+                Control frm = factory.CreateInstance(m_registry, m_entry, m_objName, obj);
+                if ((frm is not null) && !frm.IsDisposed)
+                {
+                    EntryPoint.GetMainForm(m_registry).HostControl(frm);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                EntryPoint.ShowError(this, ex);
             }
         }
     }
@@ -213,7 +237,7 @@ internal partial class ObjectInformation : UserControl
 
     private void btnDispatch_Click(object sender, EventArgs e)
     {
-        Type disp_type = COMUtilities.GetDispatchTypeInfo(this, m_pObject);
+        Type disp_type = FormUtils.GetDispatchTypeInfo(this, m_pObject);
         if (disp_type is not null)
         {
             Control frm = new TypedObjectViewer(m_registry, m_objName, m_pEntry, disp_type);
@@ -284,7 +308,7 @@ internal partial class ObjectInformation : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            EntryPoint.ShowError(this, ex);
         }
     }
 
@@ -293,7 +317,7 @@ internal partial class ObjectInformation : UserControl
         try
         {
             EntryPoint.GetMainForm(m_registry).HostControl(new MarshalEditorControl(m_registry,
-                COMUtilities.MarshalObjectToObjRef(m_pObject, GetSelectedIID(),
+                COMObjRef.FromObject(m_pObject, GetSelectedIID(),
                 MSHCTX.DIFFERENTMACHINE, MSHLFLAGS.NORMAL)));
         }
         catch (Exception ex)
@@ -306,7 +330,7 @@ internal partial class ObjectInformation : UserControl
     {
         try
         {
-            if (COMUtilities.MarshalObjectToObjRef(m_pObject,
+            if (COMObjRef.FromObject(m_pObject,
                 GetSelectedIID(), MSHCTX.DIFFERENTMACHINE, MSHLFLAGS.NORMAL) is not COMObjRefStandard objref)
             {
                 throw new Exception("Object must be standard marshaled to view the interface");
@@ -324,13 +348,27 @@ internal partial class ObjectInformation : UserControl
     {
         try
         {
-            if (COMUtilities.MarshalObjectToObjRef(m_pObject,
+            if (COMObjRef.FromObject(m_pObject,
                     GetSelectedIID(), MSHCTX.DIFFERENTMACHINE, MSHLFLAGS.NORMAL) is not COMObjRefStandard objref)
             {
                 throw new Exception("Object must be standard marshaled to view the interface");
             }
 
             EntryPoint.GetMainForm(m_registry).LoadProcessByProcessId(objref.ProcessId);
+        }
+        catch (Exception ex)
+        {
+            EntryPoint.ShowError(this, ex);
+        }
+    }
+
+    private void viewTypeLibraryToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            var parsed_typelib = COMTypeLib.FromObject(m_pObject);
+            COMRegistryViewer viewer = new(m_registry, parsed_typelib, null);
+            EntryPoint.GetMainForm(m_registry).HostControl(viewer);
         }
         catch (Exception ex)
         {

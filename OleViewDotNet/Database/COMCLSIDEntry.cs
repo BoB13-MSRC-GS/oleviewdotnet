@@ -14,7 +14,6 @@
 //    You should have received a copy of the GNU General Public License
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
-using ICSharpCode.TextEditor.Actions;
 using Microsoft.Win32;
 using OleViewDotNet.Interop;
 using OleViewDotNet.Interop.SxS;
@@ -25,11 +24,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Schema;
 using System.Xml.Serialization;
@@ -591,9 +588,8 @@ public class COMCLSIDEntry : COMRegistryEntry, IComparable<COMCLSIDEntry>, IXmlS
                 dwContext = CLSCTX.SERVER;
             }
         }
-        
-        Guid iid = COMInterfaceEntry.CreateKnownInterface(Database, COMKnownInterfaces.IUnknown).Iid;
-        return COMUtilities.CreateInstance(Clsid, iid, dwContext, server, auth_info);
+
+        return COMUtilities.CreateInstance(Clsid, COMKnownGuids.IID_IUnknown, dwContext, server, auth_info);
     }
 
     public object CreateInstanceAsObject(CLSCTX dwContext, string server, COMAuthInfo auth_info = null)
@@ -618,6 +614,11 @@ public class COMCLSIDEntry : COMRegistryEntry, IComparable<COMCLSIDEntry>, IXmlS
     public object CreateClassFactory(CLSCTX dwContext, string server, COMAuthInfo auth_info = null)
     {
         return COMUtilities.CreateClassFactory(Clsid, COMKnownGuids.IID_IUnknown, dwContext, server, auth_info);
+    }
+
+    public object CreateElevated(bool factory)
+    {
+        return COMUtilities.CreateFromElevationMoniker(Clsid, factory);
     }
 
     public override string ToString()
@@ -674,7 +675,7 @@ public class COMCLSIDEntry : COMRegistryEntry, IComparable<COMCLSIDEntry>, IXmlS
 
         if (elevate)
         {
-            IEnumerable<COMCLSIDElevationEntry> elevation = 
+            IEnumerable<COMCLSIDElevationEntry> elevation =
                 reader.ReadSerializableObjects("elevation", () => new COMCLSIDElevationEntry());
             Elevation = elevation.FirstOrDefault();
         }

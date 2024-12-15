@@ -18,5 +18,5 @@ namespace OleViewDotNet.Proxy;
 
 public abstract class COMProxyTypeInfo
 {
-    public virtual string Name { get; }
+    public virtual string Name { get; set; }
 }

@@ -17,8 +17,7 @@
 using NtApiDotNet.Ndr.Marshal;
 using OleViewDotNet.Interop;
 using OleViewDotNet.Marshaling;
-using OleViewDotNet.Utilities;
-using OleViewDotNet.Wrappers;
+using OleViewDotNet.TypeManager;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -115,7 +114,7 @@ public static class COMOxidResolver
         if (iid == Guid.Empty)
             iid = COMKnownGuids.IID_IUnknown;
 
-        if (COMUtilities.MarshalObjectToObjRef(obj,
+        if (COMObjRef.FromObject(obj,
             iid, MSHCTX.LOCAL, MSHLFLAGS.NORMAL) is not COMObjRefStandard objref)
         {
             throw new ArgumentException("Object cannot be standard marshaled.", nameof(obj));
@@ -124,7 +123,7 @@ public static class COMOxidResolver
         return GetRemoteObject(objref);
     }
 
-    public static COMRemoteObject GetRemoteObject(BaseComWrapper wrapper)
+    public static COMRemoteObject GetRemoteObject(ICOMObjectWrapper wrapper)
     {
         if (wrapper is null)
         {

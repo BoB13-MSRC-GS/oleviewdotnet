@@ -75,6 +75,11 @@ namespace NtApiDotNet.Win32.Rpc
         /// Marshal pipe parameters using arrays.
         /// </summary>
         MarshalPipesAsArrays = 0x400,
+        /// <summary>
+        /// Build the client as a RPC COM object. This wraps NdrInterfacePointer values and
+        /// adds the INdrComObject marker interface to client type.
+        /// </summary>
+        ComObject = 0x800,
     }
 
     /// <summary>

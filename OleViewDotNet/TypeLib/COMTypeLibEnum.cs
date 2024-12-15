@@ -15,7 +15,6 @@
 //    along with OleViewDotNet.  If not, see <http://www.gnu.org/licenses/>.
 
 using OleViewDotNet.TypeLib.Instance;
-using OleViewDotNet.TypeLib.Parser;
 using OleViewDotNet.Utilities.Format;
 using System;
 using System.Collections.Generic;
@@ -26,12 +25,12 @@ namespace OleViewDotNet.TypeLib;
 
 public sealed class COMTypeLibEnum : COMTypeLibTypeInfo
 {
-    internal COMTypeLibEnum(COMTypeDocumentation doc, TYPEATTR attr)
-       : base(doc, attr)
+    internal COMTypeLibEnum(COMTypeDocumentation doc, TYPEATTR attr, IEnumerable<COMTypeCustomDataItem> custom_data)
+       : base(doc, attr, custom_data)
     {
     }
 
-    private protected override void OnParse(COMTypeLibParser.TypeInfo type_info, TYPEATTR attr)
+    private protected override void OnParse(COMTypeLibTypeInfoParser type_info, TYPEATTR attr)
     {
         List<COMTypeLibEnumValue> values = new();
         for (int i = 0; i < attr.cVars; ++i)

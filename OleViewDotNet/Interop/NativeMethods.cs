@@ -80,10 +80,25 @@ internal static class NativeMethods
 
     [DllImport("ole32.dll")]
     public static extern int CoCreateInstance(in Guid rclsid, IntPtr pUnkOuter, CLSCTX dwClsContext, in Guid riid, out IntPtr ppv);
+
+    [DllImport("ole32.dll", PreserveSig = false)]
+    public static extern SafeComObjectHandle CoCreateInstance(in Guid rclsid, [MarshalAs(UnmanagedType.IUnknown)] object pUnkOuter, CLSCTX dwClsContext, in Guid riid);
+
     [DllImport("ole32.dll")]
     public static extern int CoCreateInstanceEx(in Guid rclsid, IntPtr punkOuter, CLSCTX dwClsCtx, [In] COSERVERINFO pServerInfo, int dwCount, [In, Out] MULTI_QI[] pResults);
+
     [DllImport("ole32.dll")]
     public static extern int CoGetClassObject(in Guid rclsid, CLSCTX dwClsContext, [In] COSERVERINFO pServerInfo, in Guid riid, out IntPtr ppv);
+
+    [DllImport("ole32.dll", PreserveSig = false)]
+    public static extern SafeComObjectHandle CoGetClassObject(in Guid rclsid, CLSCTX dwClsContext, [In] COSERVERINFO pServerInfo, in Guid riid);
+
+    [DllImport("ole32.dll")]
+    public static extern int CoGetPSClsid(
+      in Guid riid,
+      out Guid pClsid
+    );
+
     [DllImport("ole32.dll", PreserveSig = false)]
     [return: MarshalAs(UnmanagedType.IUnknown)]
     public static extern object CoUnmarshalInterface(IStream stm, in Guid riid);
@@ -109,6 +124,14 @@ internal static class NativeMethods
     public static extern int RoActivateInstance(
         [MarshalAs(UnmanagedType.HString)] string activatableClassId,
         out IntPtr instance);
+
+    [DllImport("combase.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+    [return: MarshalAs(UnmanagedType.IInspectable)]
+    public static extern object RoActivateInstance([MarshalAs(UnmanagedType.HString)] string activatableClassId);
+
+    [DllImport("combase.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+    [return: MarshalAs(UnmanagedType.IUnknown)]
+    public static extern object RoGetActivationFactory([MarshalAs(UnmanagedType.HString)] string activatableClassId, in Guid iid);
 
     [DllImport("ole32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
     public static extern IStorage StgOpenStorageEx(
@@ -271,4 +294,53 @@ internal static class NativeMethods
         out IntPtr ppProxy,
         //[MarshalAs(UnmanagedType.IUnknown)] out object ppProxy, // IRpcProxyBuffer**
         out IntPtr ppv);
+
+    [DllImport("rpcrt4.dll")]
+    public extern static void NdrProxyInitialize(
+        SafeComObjectHandle This,
+        in RPC_MESSAGE pRpcMsg,
+        ref MIDL_STUB_MESSAGE pStubMsg,
+        in MIDL_STUB_DESC pStubDescriptor,
+        int ProcNum
+    );
+
+    [DllImport("rpcrt4.dll")]
+    public extern static void NdrProxyGetBuffer(
+        SafeComObjectHandle This,
+        ref MIDL_STUB_MESSAGE pStubMsg
+    );
+
+    [DllImport("rpcrt4.dll")]
+    public extern static void NdrProxySendReceive(
+      SafeComObjectHandle This,
+      ref MIDL_STUB_MESSAGE pStubMsg
+    );
+
+    [DllImport("rpcrt4.dll")]
+    public extern static void NdrProxyFreeBuffer(
+        SafeComObjectHandle This,
+        ref MIDL_STUB_MESSAGE pStubMsg
+    );
+
+    [DllImport("clr.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+    internal static extern void CreateAssemblyEnum(
+        out IAssemblyEnum pEnum,
+        [MarshalAs(UnmanagedType.IUnknown)] object pUnkReserved,
+        IAssemblyName pName,
+        ASM_CACHE_FLAGS dwFlags,
+        IntPtr pvReserved
+    );
+
+    [DllImport("oleaut32.dll", CharSet = CharSet.Unicode)]
+    internal static extern int LHashValOfNameSys(
+        SYSKIND syskind,
+        int lcid,
+        string szName
+    );
+
+    [DllImport("ole32.dll")]
+    internal static extern int GetRunningObjectTable(
+        int reserved,
+        out IRunningObjectTable pprot
+    );
 }

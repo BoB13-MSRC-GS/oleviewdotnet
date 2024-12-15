@@ -18,8 +18,10 @@ using NtApiDotNet.Ndr;
 using NtApiDotNet.Win32.Rpc;
 using OleViewDotNet.Database;
 using OleViewDotNet.Interop;
+using OleViewDotNet.Proxy.Editor;
 using OleViewDotNet.TypeLib;
-using OleViewDotNet.TypeLib.Parser;
+using OleViewDotNet.TypeLib.Instance;
+using OleViewDotNet.TypeManager;
 using OleViewDotNet.Utilities;
 using OleViewDotNet.Utilities.Format;
 using System;
@@ -34,26 +36,12 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
     #region Private Members
     private static readonly Dictionary<Guid, COMProxyInterface> m_proxies = new();
     private readonly COMRegistry m_registry;
+    private bool m_names_from_type;
+    private bool m_modified;
 
-    private sealed class EditableParameter : COMSourceCodeEditableObject
+    private static COMProxyInterface GetFromTypeLibrary(COMTypeLibInstance type_lib, Guid iid, COMCLSIDEntry proxy_class, bool cache)
     {
-        public EditableParameter(NdrProcedureParameter p) 
-            : base(() => p.Name, n => p.Name = n)
-        {
-        }
-    }
-
-    private sealed class EditableProcedure : COMSourceCodeEditableObject
-    {
-        public EditableProcedure(NdrProcedureDefinition proc) 
-            : base(() => proc.Name, n => proc.Name = n, proc.Params.Select(p => new EditableParameter(p)))
-        {
-        }
-    }
-
-    private static COMProxyInterface GetFromTypeLibrary(COMTypeLibParser type_lib, Guid iid, COMCLSIDEntry proxy_class, bool cache)
-    {
-        using var info = type_lib.GetTypeInfoFromGuid(iid);
+        using var info = type_lib.GetTypeInfoOfGuid(iid);
 
         var parsed_intf = info.Parse() as COMTypeLibInterfaceBase;
 
@@ -94,8 +82,78 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
 
     private static COMProxyInterface GetFromTypeLibrary(COMInterfaceEntry intf)
     {
-        using COMTypeLibParser type_lib = new(intf.TypeLibVersionEntry.NativePath);
+        using COMTypeLibInstance type_lib = COMTypeLibInstance.FromFile(intf.TypeLibVersionEntry.NativePath);
         return GetFromTypeLibrary(type_lib, intf.Iid, intf.ProxyClassEntry, true);
+    }
+
+    private void UpdateNames(Type type)
+    {
+        if (Iid != type.GUID)
+        {
+            return;
+        }
+
+        Entry.Name = type.FullName;
+        var methods = type.GetMethods();
+        if (methods.Length != Procedures.Count)
+        {
+            return;
+        }
+        for (int i = 0; i < methods.Length; ++i)
+        {
+            Procedures[i].Name = methods[i].Name;
+            var ps_names = methods[i].GetParameters().Select(p => p.Name).ToList();
+            if (methods[i].ReturnType != typeof(void))
+            {
+                ps_names.Add("retval");
+            }
+            if (ps_names.Count != Procedures[i].Parameters.Count)
+            {
+                continue;
+            }
+            for (int j = 0; j < ps_names.Count; ++j)
+            {
+                Procedures[i].Parameters[j].Name = ps_names[j];
+            }
+        }
+    }
+
+    private void UpdateFromFile()
+    {
+        try
+        {
+            COMProxyInterfaceNameData names = COMProxyInterfaceNameData.LoadFromCache(Iid);
+            names.UpdateNames(this);
+            m_modified = false;
+        }
+        catch
+        {
+        }
+    }
+
+    private void CheckNameUpdate(COMInterfaceEntry ent)
+    {
+        if (m_names_from_type)
+        {
+            return;
+        }
+        m_names_from_type = true;
+        if (ent.TryGetRuntimeType(out Type type))
+        {
+            UpdateNames(type);
+        }
+        else
+        {
+            UpdateFromFile();
+        }
+        m_modified = false;
+    }
+
+    private void SetModified()
+    {
+        m_modified = true;
+        COMProxyInterfaceClientBuilder.FlushIidType(Iid);
+        COMTypeManager.FlushIidType(Iid);
     }
     #endregion
 
@@ -103,11 +161,11 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
     /// <summary>
     /// The name of the proxy interface.
     /// </summary>
-    public override string Name { get; }
-    /// <summary>
-    /// Original name of the interface.
-    /// </summary>
-    public string OriginalName { get; }
+    public override string Name
+    {
+        get => Entry.Name;
+        set => Entry.Name = CheckName(Entry.Name, value);
+    }
     /// <summary>
     /// The IID of the proxy interface.
     /// </summary>
@@ -127,11 +185,11 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
     /// <summary>
     /// List of parsed procedures for the interface.
     /// </summary>
-    public IList<NdrProcedureDefinition> Procedures => Entry.Procedures;
+    public IReadOnlyList<COMProxyInterfaceProcedure> Procedures { get; }
 
     public NdrComProxyDefinition Entry => RpcProxy.Proxy;
 
-    public IReadOnlyList<NdrComplexTypeReference> ComplexTypes => RpcProxy.ComplexTypes.ToList().AsReadOnly();
+    public IReadOnlyList<COMProxyComplexType> ComplexTypes { get; }
 
     public string Path => ClassEntry.DefaultServer;
 
@@ -145,10 +203,12 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
 
     Guid ICOMGuid.ComGuid => Iid;
 
-    string ICOMSourceCodeEditable.Name { get => Entry.Name; set => Entry.Name = value; }
+    bool ICOMSourceCodeEditable.IsEditable => true;
 
-    IReadOnlyList<ICOMSourceCodeEditable> ICOMSourceCodeEditable.Members =>
-        Procedures.Select(p => new EditableProcedure(p)).ToList().AsReadOnly();
+    void ICOMSourceCodeEditable.Update()
+    {
+        SetModified();
+    }
     #endregion
 
     #region Internal Members
@@ -162,16 +222,37 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
         m_registry = registry;
         if (string.IsNullOrWhiteSpace(Entry.Name))
         {
-            Name = m_registry.MapIidToInterface(Iid).Name;
+            Entry.Name = m_registry.MapIidToInterface(Iid).Name;
         }
         else
         {
-            Name = COMUtilities.DemangleWinRTName(Entry.Name, Iid);
+            Entry.Name = WinRTNameUtils.DemangleName(Entry.Name, Iid);
         }
         if (cache && !m_proxies.ContainsKey(Iid))
         {
             m_proxies.Add(Iid, this);
         }
+        Procedures = Entry.Procedures.Select(p => new COMProxyInterfaceProcedure(this, p)).ToList().AsReadOnly();
+        ComplexTypes = rpc_proxy.ComplexTypes.Select(c => new COMProxyComplexType(c, this)).ToList().AsReadOnly();
+    }
+
+    internal string CheckName(string name, string new_name)
+    {
+        if (string.IsNullOrEmpty(new_name) || (name == new_name))
+        {
+            return name;
+        }
+
+        SetModified();
+        return new_name;
+    }
+
+    internal static IEnumerable<COMProxyInterface> GetModifiedProxies() => m_proxies.Values.Where(p => p.m_modified);
+
+    internal RpcClientBase CreateClient(bool scripting = false)
+    {
+        Type type = CreateClientType(scripting);
+        return (RpcClientBase)Activator.CreateInstance(type.BaseType);
     }
     #endregion
 
@@ -190,6 +271,7 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
 
         if (m_proxies.TryGetValue(intf.Iid, out COMProxyInterface instance))
         {
+            instance.CheckNameUpdate(intf);
             return instance;
         }
 
@@ -212,6 +294,7 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
             throw new ArgumentException($"No Proxy Found for IID {intf.Iid}");
         }
 
+        instance.CheckNameUpdate(intf);
         return instance;
     }
 
@@ -232,31 +315,21 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
             throw new ArgumentNullException(nameof(registry));
         }
 
-        using COMTypeLibParser type_lib = new(path);
+        using COMTypeLibInstance type_lib = COMTypeLibInstance.FromFile(path);
         COMCLSIDEntry proxy_class = new(registry, COMKnownGuids.CLSID_PSAutomation, COMServerType.InProcServer32);
         return GetFromTypeLibrary(type_lib, iid, proxy_class, false);
     }
     #endregion
 
     #region Public Methods
-    public RpcClientBase CreateClient(bool scripting = false)
+    public Type CreateClientType(bool scripting)
     {
-        RpcClientBuilderArguments args = new();
-        args.Flags = RpcClientBuilderFlags.UnsignedChar |
-            RpcClientBuilderFlags.NoNamespace;
-        if (scripting)
-        {
-            args.Flags |= RpcClientBuilderFlags.GenerateConstructorProperties |
-                RpcClientBuilderFlags.StructureReturn |
-                RpcClientBuilderFlags.HideWrappedMethods;
-        }
+        return COMProxyInterfaceClientBuilder.CreateClientType(this, scripting);
+    }
 
-        args.Flags = RpcClientBuilderFlags.GenerateConstructorProperties |
-            RpcClientBuilderFlags.StructureReturn |
-            RpcClientBuilderFlags.HideWrappedMethods |
-            RpcClientBuilderFlags.UnsignedChar |
-            RpcClientBuilderFlags.NoNamespace;
-        return RpcClientBuilder.CreateClient(RpcProxy, args);
+    public string BuildClientSource(bool scripting = false)
+    {
+        return COMProxyInterfaceClientBuilder.BuildClientSource(this, scripting);
     }
 
     public string FormatText(ProxyFormatterFlags flags = ProxyFormatterFlags.None)
@@ -268,20 +341,53 @@ public sealed class COMProxyInterface : COMProxyTypeInfo, IProxyFormatter, ICOMS
         return builder.ToString();
     }
 
+    public COMProxyInterfaceNameData GetNames()
+    {
+        return new(this);
+    }
+
+    public void UpdateNames(COMProxyInterfaceNameData names)
+    {
+        if (Iid != names.Iid)
+        {
+            throw new ArgumentException("Names object doesn't match the proxy identity");
+        }
+
+        Name = names.Name;
+        names.UpdateNames(this);
+    }
+
     void ICOMSourceCodeFormattable.Format(COMSourceCodeBuilder builder)
     {
         INdrFormatter formatter = builder.GetNdrFormatter();
-        if (!builder.InterfacesOnly && ComplexTypes.Count > 0)
+        if (formatter is INdrFormatterBuilder format_builder)
         {
-            foreach (var type in ComplexTypes)
+            if (!builder.InterfacesOnly && ComplexTypes.Count > 0)
             {
-                builder.AppendLine(formatter.FormatComplexType(type).TrimEnd());
+                foreach (var type in ComplexTypes)
+                {
+                    format_builder.FormatComplexType(builder, type.Entry);
+                }
+                builder.AppendLine();
             }
+
+            format_builder.FormatComProxy(builder, Entry);
             builder.AppendLine();
         }
+        else
+        {
+            if (!builder.InterfacesOnly && ComplexTypes.Count > 0)
+            {
+                foreach (var type in ComplexTypes)
+                {
+                    builder.AppendLine(formatter.FormatComplexType(type.Entry).TrimEnd());
+                }
+                builder.AppendLine();
+            }
 
-        builder.AppendLine(formatter.FormatComProxy(Entry).TrimEnd());
-        builder.AppendLine();
+            builder.AppendLine(formatter.FormatComProxy(Entry).TrimEnd());
+            builder.AppendLine();
+        }
     }
     #endregion
 }

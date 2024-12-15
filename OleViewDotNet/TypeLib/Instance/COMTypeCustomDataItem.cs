@@ -29,5 +29,14 @@ public sealed class COMTypeCustomDataItem
         Guid = item.guid;
         Value = item.varValue.ToObject();
     }
-}
 
+    internal string FormatAttribute()
+    {
+        string val = Value switch
+        {
+            string s => "\"" + s.Replace(@"\", @"\\").Replace("\"", "\\\"") + "\"",
+            _ => Value?.ToString() ?? string.Empty,
+        };
+        return $"custom({Guid}, {val})";
+    }
+}

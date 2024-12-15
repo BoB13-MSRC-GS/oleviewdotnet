@@ -82,7 +82,14 @@ namespace NtApiDotNet.Win32.Rpc
             foreach (var p in parameters)
             {
                 method.AddParam(p.Item1, p.Item2);
-                method.Statements.Add(new CodeAssignStatement(target.GetFieldReference(p.Item2), GetVariable(p.Item2)));
+                CodeExpression get_p = GetVariable(p.Item2);
+                if (p.Item1.BaseType == typeof(INdrComObject).FullName)
+                {
+                    get_p = GetStaticMethod(typeof(NdrEmbeddedPointer<INdrComObject>), 
+                        nameof(NdrEmbeddedPointer<INdrComObject>.Create), get_p);
+                }
+
+                method.Statements.Add(new CodeAssignStatement(target.GetFieldReference(p.Item2), get_p));
             }
         }
 
@@ -267,7 +274,8 @@ namespace NtApiDotNet.Win32.Rpc
             return type;
         }
 
-        public static CodeMemberProperty AddProperty(this CodeTypeDeclaration type, string name, CodeTypeReference prop_type, MemberAttributes attributes, params CodeStatement[] get_statements)
+        public static CodeMemberProperty AddProperty(this CodeTypeDeclaration type, string name, CodeTypeReference prop_type, 
+            MemberAttributes attributes, params CodeStatement[] get_statements)
         {
             var property = new CodeMemberProperty
             {
@@ -318,6 +326,22 @@ namespace NtApiDotNet.Win32.Rpc
             method.PrivateImplementationType = new CodeTypeReference(typeof(INdrStructure));
             method.ReturnType = typeof(int).ToRef();
             method.AddReturn(GetPrimitive(alignment));
+        }
+
+        public static CodeExpression GetMarshalerExpression()
+        {
+            return new CodeMethodInvokeExpression(null, "GetMarshaler");
+        }
+
+        public static void ImplementComObject(this CodeTypeDeclaration type)
+        {
+            type.BaseTypes.Add(typeof(INdrComObject));
+            CodeMemberMethod method = type.AddMethod(nameof(INdrComObject.QueryInterface), MemberAttributes.Final | MemberAttributes.Private);
+            method.PrivateImplementationType = new CodeTypeReference(typeof(INdrComObject));
+            method.ReturnType = typeof(INdrComObject).ToRef();
+            method.AddParam(typeof(Guid).ToRef(), "iid");
+            method.AddReturn(new CodeMethodInvokeExpression(GetMarshalerExpression(), nameof(INdrTransportMarshaler.QueryComObject),
+                new CodeThisReferenceExpression(), GetVariable("iid")));
         }
 
         public static CodeMemberMethod AddUnmarshalMethod(this CodeTypeDeclaration type, string unmarshal_name, MarshalHelperBuilder marshal_helper)
@@ -688,9 +712,9 @@ namespace NtApiDotNet.Win32.Rpc
             return FieldDirection.In;
         }
 
-        public static void CreateMarshalObject(this CodeMemberMethod method, string name, MarshalHelperBuilder marshal_helper)
+        public static void CreateMarshalObject(this CodeMemberMethod method, string name, MarshalHelperBuilder marshal_helper, params CodeExpression[] parameters)
         {
-            method.Statements.Add(new CodeVariableDeclarationStatement(marshal_helper.MarshalHelperType, name, new CodeObjectCreateExpression(marshal_helper.MarshalHelperType)));
+            method.Statements.Add(new CodeVariableDeclarationStatement(marshal_helper.MarshalHelperType, name, new CodeObjectCreateExpression(marshal_helper.MarshalHelperType, parameters)));
         }
 
         public static void CreateSendReceive(this CodeTypeDeclaration type, MarshalHelperBuilder marshal_helper)
@@ -849,6 +873,7 @@ namespace NtApiDotNet.Win32.Rpc
         public static RpcMarshalArgument CalculateCorrelationArgument(this NdrCorrelationDescriptor correlation,
             int current_offset, IEnumerable<Tuple<int, string>> offset_to_name, bool disable_correlation)
         {
+            bool is_iid = correlation.Flags.HasFlagSet(NdrCorrelationFlags.IsIidIs);
             if (correlation.IsConstant)
             {
                 return RpcMarshalArgument.CreateFromPrimitive((long)correlation.Offset);
@@ -865,48 +890,57 @@ namespace NtApiDotNet.Win32.Rpc
                     current_offset, offset_to_name, disable_correlation), typeof(long).ToRef());
             }
 
-            if (disable_correlation)
+            if (!disable_correlation)
             {
-                return RpcMarshalArgument.CreateFromPrimitive(-1L);
-            }
-
-            var offset = FindCorrelationArgument(current_offset + correlation.Offset, offset_to_name);
-            if (offset != null)
-            {
-                CodeExpression expr = GetVariable(offset);
-                CodeExpression right_expr = null;
-                CodeBinaryOperatorType operator_type = CodeBinaryOperatorType.Add;
-                switch (correlation.Operator)
+                var offset = FindCorrelationArgument(current_offset + correlation.Offset, offset_to_name);
+                if (offset != null)
                 {
-                    case NdrFormatCharacter.FC_ADD_1:
-                        right_expr = GetPrimitive(1);
-                        operator_type = CodeBinaryOperatorType.Add;
-                        break;
-                    case NdrFormatCharacter.FC_DIV_2:
-                        right_expr = GetPrimitive(2);
-                        operator_type = CodeBinaryOperatorType.Divide;
-                        break;
-                    case NdrFormatCharacter.FC_MULT_2:
-                        right_expr = GetPrimitive(2);
-                        operator_type = CodeBinaryOperatorType.Multiply;
-                        break;
-                    case NdrFormatCharacter.FC_SUB_1:
-                        right_expr = GetPrimitive(2);
-                        operator_type = CodeBinaryOperatorType.Multiply;
-                        break;
-                    case NdrFormatCharacter.FC_DEREFERENCE:
+                    CodeExpression expr = GetVariable(offset);
+                    if (is_iid || correlation.Operator == NdrFormatCharacter.FC_DEREFERENCE)
+                    {
                         expr = expr.DeRef();
-                        break;
-                }
+                    }
+                    else
+                    {
+                        CodeExpression right_expr = null;
+                        CodeBinaryOperatorType operator_type = CodeBinaryOperatorType.Add;
+                        switch (correlation.Operator)
+                        {
+                            case NdrFormatCharacter.FC_ADD_1:
+                                right_expr = GetPrimitive(1);
+                                operator_type = CodeBinaryOperatorType.Add;
+                                break;
+                            case NdrFormatCharacter.FC_DIV_2:
+                                right_expr = GetPrimitive(2);
+                                operator_type = CodeBinaryOperatorType.Divide;
+                                break;
+                            case NdrFormatCharacter.FC_MULT_2:
+                                right_expr = GetPrimitive(2);
+                                operator_type = CodeBinaryOperatorType.Multiply;
+                                break;
+                            case NdrFormatCharacter.FC_SUB_1:
+                                right_expr = GetPrimitive(2);
+                                operator_type = CodeBinaryOperatorType.Multiply;
+                                break;
+                            case NdrFormatCharacter.FC_DEREFERENCE:
+                                expr = expr.DeRef();
+                                break;
+                        }
 
-                if (right_expr != null)
-                {
-                    expr = new CodeBinaryOperatorExpression(expr, operator_type, right_expr);
+                        if (right_expr != null)
+                        {
+                            expr = new CodeBinaryOperatorExpression(expr, operator_type, right_expr);
+                        }
+                    }
+                    return new RpcMarshalArgument(expr, is_iid ? typeof(Guid).ToRef() : typeof(long).ToRef());
                 }
-                return new RpcMarshalArgument(expr, new CodeTypeReference(typeof(long)));
             }
 
-            // We failed to find the base name, return -1 as a default.
+            // We failed to find the base name, return a default.
+            if (is_iid)
+            {
+                return RpcMarshalArgument.CreateFromGuid(NdrNativeUtils.IID_IUnknown);
+            }
             return RpcMarshalArgument.CreateFromPrimitive(-1L);
         }
 

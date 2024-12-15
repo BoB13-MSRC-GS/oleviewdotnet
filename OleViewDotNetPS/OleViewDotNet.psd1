@@ -20,7 +20,7 @@
 RootModule = 'OleViewDotNet.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.14'
+ModuleVersion = '1.16'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -35,7 +35,7 @@ Author = 'James Forshaw'
 CompanyName = 'None'
 
 # Copyright statement for this module
-Copyright = 'James Forshaw (c) 2023'
+Copyright = 'James Forshaw (c) 2024'
 
 # Description of the functionality provided by this module
 Description = 'PowerShell module for OleViewDotNet'
@@ -65,7 +65,9 @@ FunctionsToExport = 'Get-ComDatabase', 'Set-ComDatabase', 'Compare-ComDatabase',
                     'Start-ComRuntimeExtension', 'Get-ComMimeType', 'Get-ComProgId', 'Get-ComObjectInterface', 'ConvertTo-ComAssembly', 'Get-ComGuid',
                     'Test-ComInterface', 'Format-ComSecurityDescriptor', 'Test-ComAccess', 'Get-ComAccess', 'Clear-ComDatabase', 'Export-ComInterfaceNameCache',
                     'Get-ComAccessToken', 'ConvertTo-ComSourceCode', 'Get-ComSymbolResolver', 'Reset-ComSymbolResolver', 'Get-ComCredential', 'Get-ComAuthInfo',
-                    'Get-ComRpcClient', 'New-ComStandardActivator', 'New-ComActivator', 'New-ComActivationProperties', 'Import-ComTypeLib'
+                    'Get-ComRpcClient', 'New-ComStandardActivator', 'New-ComActivator', 'New-ComActivationProperties', 'Import-ComTypeLib', 'Get-ComProxyName',
+                    'Set-ComProxyName', 'Get-ComRuntimeType', 'Edit-ComSourceCode', 'Import-ComProxyName', 'Export-ComProxyName', 'Add-ComObjectInterface',
+                    'Get-ComRunningObjectTable', 'Get-ComRunningObject'
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()
@@ -91,12 +93,10 @@ PrivateData = @{
         ProjectUri = 'https://github.com/tyranid/oleviewdotnet'
 
         # ReleaseNotes of this module
-        ReleaseNotes = 'v1.14
+        ReleaseNotes = 'v1.16
 ----
-* Fixes for Windows 11.
-* Added "default" database.
-* Reimplemented settings.
-* Better support for ARM64 systems.
+* Better support for scripting interfaces by returning an structure for output parameters.
+* Bug fixes.
 '
 
     } # End of PSData hashtable
