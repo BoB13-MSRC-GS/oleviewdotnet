@@ -1240,7 +1240,6 @@ internal partial class COMRegistryViewer : UserControl
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
-        //this.resolvingForm = new ResolvingForm();
         Application.Run(findInterfaceForm);
     }
 
