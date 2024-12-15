@@ -46,7 +46,6 @@ namespace OleViewDotNet.Forms
                             {
                                 String[] parts = valueName.Split('\\');
                                 String fileName = String.Join("\\", parts, 0, parts.Length - 1) + "\\idat64.exe";
-                                Console.WriteLine("IDAT Path : " + fileName);
                                 if (File.Exists(fileName))
                                 {
                                     IDAPath = fileName;
@@ -115,12 +114,10 @@ namespace OleViewDotNet.Forms
             }
             catch (Exception ex)
             {
-                Console.WriteLine("GetBinaryPath():" + ex.ToString());
             }
 
             if (value == null)
             {
-                Console.WriteLine("Failed to get binary path.");
                 return null;
             }
             else
@@ -142,7 +139,6 @@ namespace OleViewDotNet.Forms
                     binaryName = String.Join(" ", parts, 0, parts.Length - 1);
                 }
 
-                Console.WriteLine($"Binary Path : {binaryName}");
                 return binaryName;
             }
         }
@@ -165,11 +161,9 @@ namespace OleViewDotNet.Forms
             String binaryName = Path.GetFileName(binaryPath);
             if (File.Exists($"DLLs\\{binaryName}" + ".asm")) return true;
             CopyDLL(binaryPath);
-            Console.WriteLine("GenerateAsmFile() Start. " + binaryName);
             Process process = new Process();
             if (IDAPath == null) process.StartInfo.FileName = GetIDAT();
             process.StartInfo.FileName = IDAPath;
-            Console.WriteLine($"IDAT Path : {IDAPath}");
             process.StartInfo.Arguments = $"-A -B DLLs\\{binaryName}";
             process.StartInfo.CreateNoWindow = true;
             process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
@@ -182,11 +176,9 @@ namespace OleViewDotNet.Forms
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.ToString());
                 MessageBox.Show("Failed to resolve interfaces.");
             }
             process.Dispose();
-            Console.WriteLine("GenerateAsmFile() Done.");
             return true;
         }
 
@@ -263,7 +255,6 @@ namespace OleViewDotNet.Forms
             int idlMethodCnt;
             if (firstProcNum == -1 || lastProcNum == -1)
             {
-                Console.WriteLine($"firstProcNum {firstProcNum} lastProcNum {lastProcNum}");
                 return ret;
             }
             else idlMethodCnt = lastProcNum - firstProcNum + 1;
@@ -294,7 +285,6 @@ namespace OleViewDotNet.Forms
 
                 if (line.Contains($"`vftable'{{for `{interfaceName}'}}"))
                 {
-                    Console.WriteLine("Got New vftable : " + line);
                     int nowIndex = lineIndex;
                     bool flag = false;
                     while (true)
@@ -310,7 +300,6 @@ namespace OleViewDotNet.Forms
                     }
                     if (flag)
                     {
-                        Console.WriteLine($"flag enabled. return to {nowIndex} from {lineIndex}.");
                         continue;
                     }
                     while (true)
@@ -335,7 +324,6 @@ namespace OleViewDotNet.Forms
                             }
                             catch (IndexOutOfRangeException ex)
                             {
-                                Console.WriteLine(ex.Message);
                                 methodName = line.Split('?')[1].Split('@')[0];
                             }
                             methods.Add($"/*{className}*/{methodName}");
@@ -369,7 +357,6 @@ namespace OleViewDotNet.Forms
             int idlMethodCnt;
             if (firstProcNum == -1 || lastProcNum == -1)
             {
-                Console.WriteLine($"firstProcNum {firstProcNum} lastProcNum {lastProcNum}");
                 return ret;
             }
             else idlMethodCnt = lastProcNum - firstProcNum + 1;
@@ -399,7 +386,6 @@ namespace OleViewDotNet.Forms
                     line = asmLines[lineIndex++];
                     if (line.Contains("QueryInterface"))
                     {
-                        Console.WriteLine("Got New vftable : " + line);
                         int idlIndex = 0;
                         int startIndex = 3;
                         int diffCnt = 0;
@@ -425,7 +411,6 @@ namespace OleViewDotNet.Forms
                         {
                             nowIndex = lineIndex;
                             line = asmLines[lineIndex++].Trim(' ');
-                            Console.WriteLine("Now Processing : " + line);
                             if (line.Contains("?Release")) continue;
                             if (line.StartsWith("dq offset ??"))
                             {
@@ -483,7 +468,6 @@ namespace OleViewDotNet.Forms
                                 }
                                 catch (IndexOutOfRangeException ex)
                                 {
-                                    Console.WriteLine(ex.Message);
                                     methodName = line.Split('?')[1].Split('@')[0];
                                 }
                                 methods.Add($"/*{className}*/{methodName}");
@@ -517,7 +501,6 @@ namespace OleViewDotNet.Forms
         // Counts parameters from each methods in idl.
         public static int CountParameters(string functionDeclaration)
         {
-            Console.WriteLine($"CountParameters() Processing : {functionDeclaration}");
             if (functionDeclaration.Trim().EndsWith("(void)"))
                 return 0;
 

@@ -377,7 +377,6 @@ internal partial class SourceCodeViewerControl : UserControl
             }
         }
         catch (Exception e) { return null; }
-        Console.WriteLine("CLSID : " + clsid.ToString());
         string regKey = $"CLSID\\{{{clsid}}}";
         String appId = null;
         try
@@ -389,7 +388,6 @@ internal partial class SourceCodeViewerControl : UserControl
                     object appIdValue = key.GetValue("AppID");
                     if (appIdValue != null)
                     {
-                        Console.WriteLine("App ID : " + appIdValue.ToString());
                         appId = appIdValue.ToString();
                     }
                 }
@@ -397,7 +395,6 @@ internal partial class SourceCodeViewerControl : UserControl
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"GetServiceName(1): {ex.Message}");
             return null;
         }
 
@@ -412,7 +409,6 @@ internal partial class SourceCodeViewerControl : UserControl
                     object serviceName = key.GetValue("LocalService");
                     if (serviceName != null)
                     {
-                        Console.WriteLine("Service Name : " + serviceName.ToString());
                         return serviceName.ToString();
                     }
                 }
@@ -420,7 +416,6 @@ internal partial class SourceCodeViewerControl : UserControl
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"GetServiceName(2): {ex.Message}");
             return null;
         }
         return null;
@@ -447,12 +442,10 @@ internal partial class SourceCodeViewerControl : UserControl
                 }
                 catch (InvalidOperationException ex)
                 {
-                    Console.WriteLine("GetServicePid(): " + ex.Message);
                     continue;
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("GetServicePid(): " + ex.Message);
                     continue;
                 }
                 if (searcher.Get().Count == 1) return Convert.ToInt32(obj["ProcessId"]);
