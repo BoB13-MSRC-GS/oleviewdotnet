@@ -1,13 +1,14 @@
 
 
 <div align='center'>
-  <h1><code>oleviewdotnet (BoB13-MSRC_GASAN)</code></h1>
+  <h1><code>oleviewdotnet
+(BoB13-MSRC_GASAN)</code></h1>
   <p>
     <strong>Enhanced oleviewdotnet</strong><br>
     show more interfaces, resolve IDL method name, provide class object call sequence
   </p>
   <p>
-    Derived from oleviewdotnet of tyranid(James Forshaw)
+    Derived from <a href="https://github.com/tyranid/oleviewdotnet">oleviewdotnet</a> of tyranid(James Forshaw)
   </p>
   <p>
     <img src='add please'/>
