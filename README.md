@@ -5,7 +5,7 @@
 (BoB13-MSRC_GASAN)</code></h1>
   <p>
     <strong>Enhanced oleviewdotnet</strong><br>
-    show more interfaces, resolve IDL method name, provide class object call sequence
+    show more interfaces, resolve IDL method name, provide interface object call sequence
   </p>
   <p>
     Derived from <a href="https://github.com/tyranid/oleviewdotnet">oleviewdotnet</a> of tyranid(James Forshaw)
@@ -20,7 +20,7 @@ The existing oleviewdotnet has a problem where the method name appears as `Proc{
 
 Also, there is a problem where the corresponding interface is not output for certain classes.
 
-This repository has improved this part and added convenient features such as providing class object call sequence.
+This repository has improved this part and added convenient features such as providing interface object call sequence.
 
 ---
 
@@ -53,18 +53,18 @@ This repository has improved this part and added convenient features such as pro
 ---
 
 ## Additional features
-### Class object Call Sequence
+### Interface object Call Sequence
 <p align='center'>
 <img src='pics/callsequence.webp'>
 </p>
 
-- **Lists all sequence of other class objects that can be obtained from an exposed COM class.**
-- You can obtain various class objects from exposed COM classes, such as IWallet->IWalletItemManager->IWalletItemList->IWalletItem, and understanding them is deep and complex.
-- From a vulnerability research perspective, it easily identifies the scope of class objects that can be accessed and analyzed.
+- **Lists all sequence of other interface objects that can be obtained from an exposed COM interface.**
+- You can obtain various interface objects from exposed COM interfaces, such as IWallet->IWalletItemManager->IWalletItemList->IWalletItem, and understanding them is deep and complex.
+- From a vulnerability research perspective, it easily identifies the scope of interface objects that can be accessed and analyzed.
 ---
 
 ## Achievement
 - We can extract more 91 methods.
 - We can automatically find the vtable of an interface and resolve IDL method names with high accuracy.
-- We can easily determine the target scope of the COM class
+- We can easily determine the target scope of the COM interface
 - As a result, a dramatic reduction in the initial analysis time for vulnerability analysis is possible.
