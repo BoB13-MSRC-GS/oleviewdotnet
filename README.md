@@ -11,9 +11,7 @@
     Derived from <a href="https://github.com/tyranid/oleviewdotnet">oleviewdotnet</a> of tyranid(James Forshaw)
   </p>
   <p>
-    <video controls>
-      <source src='pics/demo_oleviewdotnet.webm' type="video/webm" />
-    </video>
+    <img src='pics/oleviewdotnet.gif'>
   </p>
 </div>
 
